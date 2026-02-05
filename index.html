@@ -254,18 +254,31 @@
             userName: document.getElementById('userName')
         };
 
+        // Helper to notify user with domain instructions
+        function handleAuthError(error) {
+            console.error("Auth error:", error);
+            if (error.code === 'auth/unauthorized-domain') {
+                const domain = window.location.hostname;
+                notify("Configuration Error", `Add domain "${domain}" to Firebase Authorized Domains in settings.`);
+                console.warn(`[SenseHRV] Unauthorized Domain detected. Please whitelist "${domain}" in Firebase Console -> Authentication -> Settings -> Authorized domains.`);
+            } else if (error.code === 'auth/operation-not-allowed') {
+                notify("Operation Error", "Ensure Google Sign-in is enabled in Firebase Authentication console.");
+            } else {
+                notify("Auth Error", error.message);
+            }
+        }
+
         // Initialize Firebase Auth
         async function initAuth() {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 }
-                // We let the user choose to sign in with Google or stay anonymous as fallback
                 if (!auth.currentUser) {
                     await signInAnonymously(auth);
                 }
             } catch (error) {
-                console.error("Initial auth failed:", error);
+                handleAuthError(error);
             }
         }
 
@@ -292,7 +305,7 @@
                 notify("Signing in...", "Google Authentication");
                 await signInWithPopup(auth, googleProvider);
             } catch (error) {
-                notify("Login Failed", error.message);
+                handleAuthError(error);
             }
         }
 
