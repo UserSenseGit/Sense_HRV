@@ -181,7 +181,10 @@
 
             <!-- History Section -->
             <section id="historySection" class="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 mb-8">
-                <h2 class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest leading-none">History (Cloud)</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">History (Cloud)</h2>
+                    <span id="cloudStatus" class="text-[8px] font-black uppercase text-slate-400">Status: Disconnected</span>
+                </div>
                 <div id="historyList" class="space-y-3">
                     <p class="text-[10px] text-slate-400 italic text-center py-4">Checking Cloud Connection...</p>
                 </div>
@@ -198,7 +201,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Setup ---
         const firebaseConfig = {
@@ -217,6 +220,7 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'sense-hrv-v1';
 
         let currentUser = null;
+        let historyUnsubscribe = null;
 
         // --- App Logic ---
         const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#22c55e', '#ef4444', '#6366f1'];
@@ -259,64 +263,50 @@
             logoutBtn: document.getElementById('logoutBtn'),
             userProfile: document.getElementById('userProfile'),
             userName: document.getElementById('userName'),
-            syncLabel: document.getElementById('cloudSyncing')
+            syncLabel: document.getElementById('cloudSyncing'),
+            cloudStatus: document.getElementById('cloudStatus')
         };
 
         function handleAuthError(error) {
             console.error("Auth error:", error);
             if (error.code === 'auth/unauthorized-domain') {
                 const domain = window.location.hostname;
-                notify("Domain Blocked", "Allow this domain in Firebase console");
-                // Log clear instructions in console for the user
-                console.error(`[SenseHRV] FIREBASE ERROR: Unauthorized domain. Please follow these steps:
-                1. Go to Firebase Console -> Authentication -> Settings -> Authorized Domains.
-                2. Click 'Add domain' and enter: ${domain}
-                3. Refresh this page.`);
-            } else if (error.code === 'auth/operation-not-allowed') {
-                notify("Login Disabled", "Enable Google Sign-in in Firebase Console");
+                notify("Domain Error", "Whitelist this domain in Firebase");
+                ui.historyList.innerHTML = `<div class='p-4 text-[10px] text-red-500 bg-red-50 rounded-2xl'>Unauthorized domain. Add "${domain}" to Firebase console.</div>`;
             } else {
                 notify("Auth Alert", error.message);
             }
         }
 
-        // Initialize Firebase Auth
+        // Initialize Firebase Auth (Rule 3)
         async function initAuth() {
-            try {
-                // Wait for initial auth state check
-                onAuthStateChanged(auth, async (user) => {
-                    currentUser = user;
-                    if (user && !user.isAnonymous) {
-                        ui.loginBtn.classList.add('hidden');
-                        ui.userProfile.classList.remove('hidden');
-                        ui.userName.innerText = user.displayName || 'User';
-                        loadHistory();
-                        checkActiveSession();
-                    } else if (user && user.isAnonymous) {
-                        ui.loginBtn.classList.remove('hidden');
-                        ui.userProfile.classList.add('hidden');
-                        loadHistory();
-                        checkActiveSession();
-                    } else {
-                        // If completely logged out, sign in anonymously to allow cloud features
-                        try {
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await signInWithCustomToken(auth, __initial_auth_token);
-                            } else {
-                                await signInAnonymously(auth);
-                            }
-                        } catch (e) {
-                            handleAuthError(e);
+            onAuthStateChanged(auth, async (user) => {
+                currentUser = user;
+                if (user) {
+                    ui.loginBtn.classList.toggle('hidden', !user.isAnonymous);
+                    ui.userProfile.classList.toggle('hidden', user.isAnonymous);
+                    if (!user.isAnonymous) ui.userName.innerText = user.displayName || 'User';
+                    
+                    ui.cloudStatus.innerText = `Status: ${user.isAnonymous ? 'Anonymous' : 'Syncing'}`;
+                    setupHistoryListener();
+                    checkActiveSession();
+                } else {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
                         }
+                    } catch (e) {
+                        handleAuthError(e);
                     }
-                });
-            } catch (error) {
-                handleAuthError(error);
-            }
+                }
+            });
         }
 
         async function loginWithGoogle() {
             try {
-                notify("Sign-in initiated", "Opening Google Popup...");
+                notify("Connecting...", "Opening Google Popup");
                 await signInWithPopup(auth, googleProvider);
             } catch (error) {
                 handleAuthError(error);
@@ -361,7 +351,7 @@
 
         async function connect() {
             try {
-                notify("Searching...", "Pair your sensor");
+                notify("Searching...", "Pair sensor");
                 device = await navigator.bluetooth.requestDevice({ filters: [{ services: ['heart_rate'] }] });
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('heart_rate');
@@ -383,7 +373,7 @@
                                 const time = (Date.now() - startTime) / 1000;
                                 data.push({ t: time, rr: rr, bpm: 60000 / rr });
                                 updateChart();
-                                if (Date.now() - lastSyncTime > 2000) {
+                                if (Date.now() - lastSyncTime > 2500) {
                                     syncActiveSession();
                                     lastSyncTime = Date.now();
                                 }
@@ -447,7 +437,7 @@
                 await saveToCloud();
                 await clearActiveSession();
             }
-            notify("Analysis Ready", "Segment your data");
+            notify("Saving Session", "Syncing to cloud...");
             updateChart();
         }
 
@@ -455,16 +445,13 @@
             if (!currentUser || !recording) return;
             ui.syncLabel.classList.remove('hidden');
             try {
+                // RULE 1: /artifacts/{appId}/users/{userId}/active/current
                 const activeRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current');
                 await setDoc(activeRef, {
-                    startTime: startTime,
-                    data: data,
-                    swallowMarks: swallowMarks,
-                    duration: ui.duration.value,
-                    lastUpdated: serverTimestamp()
+                    startTime, data, swallowMarks, duration: ui.duration.value, lastUpdated: serverTimestamp()
                 });
-            } catch (e) { console.error(e); }
-            setTimeout(() => ui.syncLabel.classList.add('hidden'), 500);
+            } catch (e) { console.error("Active sync failed", e); }
+            setTimeout(() => ui.syncLabel.classList.add('hidden'), 800);
         }
 
         async function checkActiveSession() {
@@ -474,15 +461,15 @@
                 const snap = await getDoc(activeRef);
                 if (snap.exists()) {
                     const s = snap.data();
-                    const ageInMs = Date.now() - (s.lastUpdated?.toMillis() || 0);
-                    if (ageInMs < 1800000 && s.data.length > 0) {
+                    const age = Date.now() - (s.lastUpdated?.toMillis() || 0);
+                    if (age < 3600000 && s.data.length > 0) {
                         data = s.data;
                         swallowMarks = s.swallowMarks || [];
                         startTime = s.startTime;
                         ui.duration.value = s.duration;
                         ui.segSection.classList.remove('hidden');
                         updateChart();
-                        notify("Auto-Recovered", "Restored interrupted session");
+                        notify("Recovered", "Active recording restored");
                     }
                 }
             } catch (e) {}
@@ -503,47 +490,50 @@
                 await setDoc(sessionRef, {
                     timestamp: serverTimestamp(),
                     duration: ui.duration.value,
-                    data: data,
-                    swallowMarks: swallowMarks,
-                    segments: segments,
-                    userId: currentUser.uid,
-                    userName: currentUser.displayName || 'User'
+                    data, swallowMarks, segments,
+                    userId: currentUser.uid
                 });
-                loadHistory();
+                notify("Success", "Session saved to cloud");
             } catch (e) {
-                notify("Sync Failed", "Check cloud connection");
+                console.error("Save error", e);
+                notify("Cloud Error", "Failed to save final session");
             }
         }
 
-        async function loadHistory() {
+        function setupHistoryListener() {
             if (!currentUser) return;
-            try {
-                const q = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions');
-                const snapshot = await getDocs(q);
+            if (historyUnsubscribe) historyUnsubscribe();
+
+            const colRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions');
+            // RULE 2: No complex queries, fetch and sort in memory
+            historyUnsubscribe = onSnapshot(colRef, (snapshot) => {
                 const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 sessions.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
                 ui.historyList.innerHTML = sessions.length ? '' : '<p class="text-[10px] text-slate-400 italic text-center py-4">No sessions found.</p>';
                 
-                sessions.slice(0, 10).forEach(s => {
-                    const date = s.timestamp ? s.timestamp.toDate().toLocaleString() : 'Recent';
+                sessions.slice(0, 15).forEach(s => {
+                    const date = s.timestamp ? s.timestamp.toDate().toLocaleString() : 'Saving...';
                     const div = document.createElement('div');
-                    div.className = "flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100 active:scale-[0.98] transition-transform";
+                    div.className = "flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100 active:scale-[0.98] transition-transform cursor-pointer";
                     div.innerHTML = `
-                        <div class="flex flex-col gap-0.5" onclick="loadSession('${s.id}')">
+                        <div class="flex flex-col gap-0.5 flex-1" onclick="loadSession('${s.id}')">
                             <span class="text-[9px] font-black text-slate-800 uppercase leading-none">${date}</span>
                             <span class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">${s.duration}s Session</span>
                         </div>
-                        <button onclick="deleteSession('${s.id}')" class="text-red-400 text-lg px-2">&times;</button>
+                        <button onclick="deleteSession('${s.id}')" class="text-red-400 text-lg px-2 hover:bg-red-50 rounded-lg transition-colors">&times;</button>
                     `;
                     ui.historyList.appendChild(div);
                 });
-            } catch (e) {}
+            }, (error) => {
+                console.error("History listener error", error);
+                ui.historyList.innerHTML = '<p class="text-[10px] text-red-400 italic text-center py-4">Cloud connection error.</p>';
+            });
         }
 
         window.loadSession = async (id) => {
             if (!currentUser) return;
-            notify("Loading...", "Fetching data");
+            notify("Loading...", "Fetching session data");
             const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id);
             const snap = await getDoc(docRef);
             if (snap.exists()) {
@@ -554,23 +544,23 @@
                 ui.segSection.classList.remove('hidden');
                 updateChart();
                 updateUI();
-                notify("Success", "Session loaded");
+                notify("Loaded", "Cloud data restored");
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         };
 
         window.deleteSession = async (id) => {
-            if (!currentUser || !confirm("Delete session permanently?")) return;
+            if (!currentUser || !confirm("Delete this session permanently?")) return;
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id));
-                loadHistory();
-                notify("Deleted", "Removed from cloud");
+                notify("Deleted", "Cloud record removed");
             } catch (e) {}
         };
 
         ui.swallow.onclick = () => {
             if (!recording) return;
             swallowMarks.push((Date.now() - startTime) / 1000);
-            notify("Marker Set", "Interval logged");
+            notify("Swallow!", "Marker placed");
         };
 
         function autoSegment() {
@@ -597,12 +587,12 @@
             if (recording) return;
             if (!ui.segmentToggle.checked) {
                 const point = data[idx];
-                notify(`Beat Info`, `${point.bpm.toFixed(1)} BPM at ${point.t.toFixed(1)}s`);
+                notify(`Beat Details`, `${point.bpm.toFixed(1)} BPM at ${point.t.toFixed(1)}s`);
                 return;
             }
             if (selStart === null) {
                 selStart = idx;
-                notify("Selection Start", "Pick end point");
+                notify("Selection Start", "Pick the end point");
             } else {
                 const s = Math.min(selStart, idx), e = Math.max(selStart, idx);
                 if (s !== e) {
