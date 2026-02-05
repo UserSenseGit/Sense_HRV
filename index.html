@@ -42,15 +42,29 @@
 <body class="bg-slate-50 min-h-screen font-sans text-slate-900 select-none">
 
     <div class="max-w-md mx-auto p-4 pb-24">
-        <header class="flex justify-between items-center mb-4">
-            <div>
-                <h1 class="text-xl font-black text-slate-800 tracking-tighter uppercase leading-none">Sense HRV</h1>
-                <div class="flex items-center gap-2 mt-1">
-                    <div id="statusDot" class="w-2 h-2 bg-red-500 rounded-full"></div>
-                    <span id="statusText" class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Disconnected</span>
+        <header class="flex flex-col gap-4 mb-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-xl font-black text-slate-800 tracking-tighter uppercase leading-none">Sense HRV</h1>
+                    <div class="flex items-center gap-2 mt-1">
+                        <div id="statusDot" class="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span id="statusText" class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Disconnected</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="loginBtn" class="bg-white border border-slate-200 text-slate-600 text-[9px] font-black uppercase px-4 py-2 rounded-xl shadow-sm active:scale-95 transition-all flex items-center gap-2">
+                        <svg class="w-3 h-3" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                        Sign In
+                    </button>
+                    <div id="userProfile" class="hidden flex items-center gap-3">
+                        <div class="text-right">
+                            <p id="userName" class="text-[10px] font-black uppercase text-slate-800 leading-none"></p>
+                            <button id="logoutBtn" class="text-[8px] font-bold text-red-500 uppercase tracking-widest mt-0.5">Logout</button>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <button id="connectBtn" class="bg-slate-900 text-white text-[9px] font-black uppercase px-4 py-2 rounded-xl shadow-lg active:scale-95 transition-all">Connect</button>
+            <button id="connectBtn" class="w-full bg-slate-900 text-white text-[10px] font-black uppercase py-3 rounded-2xl shadow-lg active:scale-95 transition-all">Connect Heart Rate Sensor</button>
         </header>
 
         <div class="sticky-header">
@@ -162,7 +176,7 @@
             <section id="historySection" class="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 mb-8">
                 <h2 class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest leading-none">History (Cloud)</h2>
                 <div id="historyList" class="space-y-3">
-                    <p class="text-[10px] text-slate-400 italic text-center py-4">Loading history...</p>
+                    <p class="text-[10px] text-slate-400 italic text-center py-4">Checking Cloud Connection...</p>
                 </div>
             </section>
         </main>
@@ -176,9 +190,8 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAnalytics } from "firebase/analytics";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Firebase Setup ---
         const firebaseConfig = {
@@ -193,7 +206,8 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sense-hrv';
+        const googleProvider = new GoogleAuthProvider();
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sense-hrv-v1';
 
         let currentUser = null;
 
@@ -202,7 +216,7 @@
         let device, hrChar, recording = false, startTime = 0, timerInterval;
         let data = [], segments = [], selStart = null, swallowMarks = [], chart;
         let lastRRIntervals = [];
-        let lastSyncTime = 0; // For automatic saving during recording
+        let lastSyncTime = 0;
 
         const ui = {
             connect: document.getElementById('connectBtn'),
@@ -233,30 +247,63 @@
             limitMin: document.getElementById('limitMin'),
             limitMax: document.getElementById('limitMax'),
             segmentToggle: document.getElementById('segmentToggle'),
-            historyList: document.getElementById('historyList')
+            historyList: document.getElementById('historyList'),
+            loginBtn: document.getElementById('loginBtn'),
+            logoutBtn: document.getElementById('logoutBtn'),
+            userProfile: document.getElementById('userProfile'),
+            userName: document.getElementById('userName')
         };
 
-        // Initialize Firebase Auth (Rule 3)
+        // Initialize Firebase Auth
         async function initAuth() {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
+                }
+                // We let the user choose to sign in with Google or stay anonymous as fallback
+                if (!auth.currentUser) {
                     await signInAnonymously(auth);
                 }
             } catch (error) {
-                console.error("Auth failed:", error);
-                notify("Auth Error", "Cloud features disabled");
+                console.error("Initial auth failed:", error);
             }
         }
 
         onAuthStateChanged(auth, (user) => {
             currentUser = user;
-            if (user) {
+            if (user && !user.isAnonymous) {
+                ui.loginBtn.classList.add('hidden');
+                ui.userProfile.classList.remove('hidden');
+                ui.userName.innerText = user.displayName || 'User';
                 loadHistory();
-                checkActiveSession(); // Check for interrupted recordings
+                checkActiveSession();
+            } else {
+                ui.loginBtn.classList.remove('hidden');
+                ui.userProfile.classList.add('hidden');
+                if (user) {
+                    loadHistory();
+                    checkActiveSession();
+                }
             }
         });
+
+        async function loginWithGoogle() {
+            try {
+                notify("Signing in...", "Google Authentication");
+                await signInWithPopup(auth, googleProvider);
+            } catch (error) {
+                notify("Login Failed", error.message);
+            }
+        }
+
+        async function logout() {
+            try {
+                await signOut(auth);
+                location.reload();
+            } catch (error) {
+                console.error(error);
+            }
+        }
 
         function initChart() {
             const ctx = document.getElementById('mainChart').getContext('2d');
@@ -309,8 +356,6 @@
                                 const time = (Date.now() - startTime) / 1000;
                                 data.push({ t: time, rr: rr, bpm: 60000 / rr });
                                 updateChart();
-                                
-                                // Auto-sync every 2 seconds to prevent data loss on refresh
                                 if (Date.now() - lastSyncTime > 2000) {
                                     syncActiveSession();
                                     lastSyncTime = Date.now();
@@ -351,8 +396,6 @@
             ui.segSection.classList.add('hidden');
             chart.data.datasets[0].data = [];
             chart.resetZoom(); chart.update();
-            
-            // Create initial empty active session in cloud
             syncActiveSession();
 
             const totalTime = parseInt(ui.duration.value);
@@ -375,15 +418,12 @@
             if (data.length) {
                 ui.segSection.classList.remove('hidden');
                 await saveToCloud();
-                await clearActiveSession(); // Cleanup interrupted cache
+                await clearActiveSession();
             }
-            notify("Finished", "Syncing to cloud...");
+            notify("Finished", "Saving...");
             updateChart();
         }
 
-        // --- Cloud Operations (Rules 1 & 2) ---
-
-        // NEW: Sync current data during recording
         async function syncActiveSession() {
             if (!currentUser || !recording) return;
             try {
@@ -395,12 +435,9 @@
                     duration: ui.duration.value,
                     lastUpdated: serverTimestamp()
                 });
-            } catch (e) {
-                console.error("Sync failed:", e);
-            }
+            } catch (e) {}
         }
 
-        // NEW: Check for interrupted sessions on load
         async function checkActiveSession() {
             if (!currentUser) return;
             try {
@@ -408,7 +445,6 @@
                 const snap = await getDoc(activeRef);
                 if (snap.exists()) {
                     const s = snap.data();
-                    // If the session is older than 30 minutes, ignore it, otherwise offer recovery
                     const ageInMs = Date.now() - (s.lastUpdated?.toMillis() || 0);
                     if (ageInMs < 1800000 && s.data.length > 0) {
                         data = s.data;
@@ -417,22 +453,17 @@
                         ui.duration.value = s.duration;
                         ui.segSection.classList.remove('hidden');
                         updateChart();
-                        notify("Recovered!", "Interrupted session restored");
+                        notify("Recovered", "Restored active session");
                     }
                 }
-            } catch (e) {
-                console.error("Recovery check failed:", e);
-            }
+            } catch (e) {}
         }
 
         async function clearActiveSession() {
             if (!currentUser) return;
             try {
-                const activeRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current');
-                await deleteDoc(activeRef);
-            } catch (e) {
-                console.error("Cleanup failed:", e);
-            }
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current'));
+            } catch (e) {}
         }
 
         async function saveToCloud() {
@@ -445,12 +476,13 @@
                     duration: ui.duration.value,
                     data: data,
                     swallowMarks: swallowMarks,
-                    segments: segments
+                    segments: segments,
+                    userId: currentUser.uid,
+                    userName: currentUser.displayName || 'Anonymous'
                 });
                 loadHistory();
             } catch (e) {
-                console.error("Save failed:", e);
-                notify("Cloud Error", "Failed to save session");
+                notify("Save Error", e.message);
             }
         }
 
@@ -462,10 +494,10 @@
                 const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 sessions.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
 
-                ui.historyList.innerHTML = sessions.length ? '' : '<p class="text-[10px] text-slate-400 italic text-center py-4">No sessions saved yet.</p>';
+                ui.historyList.innerHTML = sessions.length ? '' : '<p class="text-[10px] text-slate-400 italic text-center py-4">No sessions found.</p>';
                 
                 sessions.slice(0, 10).forEach(s => {
-                    const date = s.timestamp ? s.timestamp.toDate().toLocaleString() : 'Saving...';
+                    const date = s.timestamp ? s.timestamp.toDate().toLocaleString() : 'Recent';
                     const div = document.createElement('div');
                     div.className = "flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100 active:scale-[0.98] transition-transform";
                     div.innerHTML = `
@@ -477,9 +509,7 @@
                     `;
                     ui.historyList.appendChild(div);
                 });
-            } catch (e) {
-                console.error("Load failed:", e);
-            }
+            } catch (e) {}
         }
 
         window.loadSession = async (id) => {
@@ -500,18 +530,18 @@
         };
 
         window.deleteSession = async (id) => {
-            if (!currentUser || !confirm("Delete this session from cloud?")) return;
+            if (!currentUser || !confirm("Delete session?")) return;
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id));
                 loadHistory();
-                notify("Deleted", "Session removed");
-            } catch (e) { console.error(e); }
+                notify("Deleted", "Removed from cloud");
+            } catch (e) {}
         };
 
         ui.swallow.onclick = () => {
             if (!recording) return;
             swallowMarks.push((Date.now() - startTime) / 1000);
-            notify("Swallow Marked", "Interval logged");
+            notify("Swallow Marked", "Logged");
         };
 
         function autoSegment() {
@@ -543,7 +573,7 @@
             }
             if (selStart === null) {
                 selStart = idx;
-                notify("Selection Start", "Pick an end point");
+                notify("Selection Start", "Pick end point");
             } else {
                 const s = Math.min(selStart, idx), e = Math.max(selStart, idx);
                 if (s !== e) {
@@ -613,7 +643,7 @@
                         </div>
                         <div class="flex items-center justify-between border-t border-slate-50 pt-4 gap-4">
                             <div class="flex flex-col gap-1 flex-1">
-                                <span class="text-[8px] font-black text-slate-300 uppercase text-center">Start Time</span>
+                                <span class="text-[8px] font-black text-slate-300 uppercase text-center">Start</span>
                                 <div class="flex items-center justify-center gap-2">
                                     <button onclick="trimStart(${i}, -1)" class="trim-btn">-</button>
                                     <span class="text-xs font-black text-slate-700 w-10 text-center">${data[seg.s].t.toFixed(0)}s</span>
@@ -621,7 +651,7 @@
                                 </div>
                             </div>
                             <div class="flex flex-col gap-1 flex-1 border-l border-slate-50 pl-4">
-                                <span class="text-[8px] font-black text-slate-300 uppercase text-center">End Time</span>
+                                <span class="text-[8px] font-black text-slate-300 uppercase text-center">End</span>
                                 <div class="flex items-center justify-center gap-2">
                                     <button onclick="trimEnd(${i}, -1)" class="trim-btn">-</button>
                                     <span class="text-xs font-black text-slate-700 w-10 text-center">${data[seg.e].t.toFixed(0)}s</span>
@@ -649,6 +679,8 @@
         ui.resetSeg.onclick = () => { segments = []; swallowMarks = []; updateUI(); };
         ui.autoSeg.onclick = autoSegment;
         ui.resetZoom.onclick = () => chart.resetZoom();
+        ui.loginBtn.onclick = loginWithGoogle;
+        ui.logoutBtn.onclick = logout;
 
         function calculateGlobal() {
             const active = segments.filter(s => !s.bypassed);
