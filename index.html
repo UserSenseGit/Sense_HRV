@@ -186,7 +186,7 @@
                     <span id="cloudStatus" class="text-[8px] font-black uppercase text-slate-400">Status: Disconnected</span>
                 </div>
                 <div id="historyList" class="space-y-3">
-                    <p class="text-[10px] text-slate-400 italic text-center py-4">Checking Cloud Connection...</p>
+                    <p class="text-[10px] text-slate-400 italic text-center py-4">Connecting to Cloud...</p>
                 </div>
             </section>
         </main>
@@ -271,14 +271,13 @@
             console.error("Auth error:", error);
             if (error.code === 'auth/unauthorized-domain') {
                 const domain = window.location.hostname;
-                notify("Domain Error", "Whitelist this domain in Firebase");
-                ui.historyList.innerHTML = `<div class='p-4 text-[10px] text-red-500 bg-red-50 rounded-2xl'>Unauthorized domain. Add "${domain}" to Firebase console.</div>`;
+                notify("Cloud Error", "Domain not authorized");
+                ui.historyList.innerHTML = `<div class='p-4 text-[10px] text-red-500 bg-red-50 rounded-2xl font-bold'>Unauthorized. Add domain "${domain}" to Firebase Console -> Authentication -> Authorized Domains.</div>`;
             } else {
                 notify("Auth Alert", error.message);
             }
         }
 
-        // Initialize Firebase Auth (Rule 3)
         async function initAuth() {
             onAuthStateChanged(auth, async (user) => {
                 currentUser = user;
@@ -287,7 +286,7 @@
                     ui.userProfile.classList.toggle('hidden', user.isAnonymous);
                     if (!user.isAnonymous) ui.userName.innerText = user.displayName || 'User';
                     
-                    ui.cloudStatus.innerText = `Status: ${user.isAnonymous ? 'Anonymous' : 'Syncing'}`;
+                    ui.cloudStatus.innerText = `Status: ${user.isAnonymous ? 'Guest' : 'Cloud Sync'}`;
                     setupHistoryListener();
                     checkActiveSession();
                 } else {
@@ -306,7 +305,7 @@
 
         async function loginWithGoogle() {
             try {
-                notify("Connecting...", "Opening Google Popup");
+                notify("Syncing...", "Opening Google Popup");
                 await signInWithPopup(auth, googleProvider);
             } catch (error) {
                 handleAuthError(error);
@@ -371,9 +370,9 @@
                             updateQuality(rr);
                             if (recording) {
                                 const time = (Date.now() - startTime) / 1000;
-                                data.push({ t: time, rr: rr, bpm: 60000 / rr });
+                                data.push({ t: time, rr, bpm: 60000 / rr });
                                 updateChart();
-                                if (Date.now() - lastSyncTime > 2500) {
+                                if (Date.now() - lastSyncTime > 3000) {
                                     syncActiveSession();
                                     lastSyncTime = Date.now();
                                 }
@@ -434,10 +433,10 @@
             ui.timerDisplay.classList.add('hidden');
             if (data.length) {
                 ui.segSection.classList.remove('hidden');
+                notify("Saving...", "Cloud Sync");
                 await saveToCloud();
                 await clearActiveSession();
             }
-            notify("Saving Session", "Syncing to cloud...");
             updateChart();
         }
 
@@ -461,7 +460,10 @@
                 const snap = await getDoc(activeRef);
                 if (snap.exists()) {
                     const s = snap.data();
-                    const age = Date.now() - (s.lastUpdated?.toMillis() || 0);
+                    // Fallback age if lastUpdated is still pending
+                    const lastUpdatedMillis = s.lastUpdated?.toMillis() || Date.now();
+                    const age = Date.now() - lastUpdatedMillis;
+                    
                     if (age < 3600000 && s.data.length > 0) {
                         data = s.data;
                         swallowMarks = s.swallowMarks || [];
@@ -472,13 +474,14 @@
                         notify("Recovered", "Active recording restored");
                     }
                 }
-            } catch (e) {}
+            } catch (e) { console.error("Recovery check failed", e); }
         }
 
         async function clearActiveSession() {
             if (!currentUser) return;
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current'));
+                const activeRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current');
+                await deleteDoc(activeRef);
             } catch (e) {}
         }
 
@@ -493,10 +496,10 @@
                     data, swallowMarks, segments,
                     userId: currentUser.uid
                 });
-                notify("Success", "Session saved to cloud");
+                notify("Success", "Session saved");
             } catch (e) {
                 console.error("Save error", e);
-                notify("Cloud Error", "Failed to save final session");
+                notify("Sync Failed", "Data not saved to cloud");
             }
         }
 
@@ -505,15 +508,21 @@
             if (historyUnsubscribe) historyUnsubscribe();
 
             const colRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions');
-            // RULE 2: No complex queries, fetch and sort in memory
+            // RULE 2: sorted in memory to avoid index requirements
             historyUnsubscribe = onSnapshot(colRef, (snapshot) => {
                 const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                sessions.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                sessions.sort((a, b) => {
+                    const timeA = a.timestamp?.seconds || (parseInt(a.id.split('_')[1]) / 1000);
+                    const timeB = b.timestamp?.seconds || (parseInt(b.id.split('_')[1]) / 1000);
+                    return timeB - timeA;
+                });
 
                 ui.historyList.innerHTML = sessions.length ? '' : '<p class="text-[10px] text-slate-400 italic text-center py-4">No sessions found.</p>';
                 
                 sessions.slice(0, 15).forEach(s => {
-                    const date = s.timestamp ? s.timestamp.toDate().toLocaleString() : 'Saving...';
+                    // Show actual time from ID if timestamp is still pending
+                    const fallbackDate = new Date(parseInt(s.id.split('_')[1])).toLocaleString();
+                    const date = s.timestamp ? s.timestamp.toDate().toLocaleString() : fallbackDate;
                     const div = document.createElement('div');
                     div.className = "flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100 active:scale-[0.98] transition-transform cursor-pointer";
                     div.innerHTML = `
@@ -527,34 +536,37 @@
                 });
             }, (error) => {
                 console.error("History listener error", error);
-                ui.historyList.innerHTML = '<p class="text-[10px] text-red-400 italic text-center py-4">Cloud connection error.</p>';
+                ui.historyList.innerHTML = '<p class="text-[10px] text-red-400 italic text-center py-4">Cloud connection blocked.</p>';
             });
         }
 
         window.loadSession = async (id) => {
             if (!currentUser) return;
-            notify("Loading...", "Fetching session data");
+            notify("Loading...", "Fetching session");
             const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id);
-            const snap = await getDoc(docRef);
-            if (snap.exists()) {
-                const s = snap.data();
-                data = s.data;
-                swallowMarks = s.swallowMarks || [];
-                segments = s.segments || [];
-                ui.segSection.classList.remove('hidden');
-                updateChart();
-                updateUI();
-                notify("Loaded", "Cloud data restored");
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
+            try {
+                const snap = await getDoc(docRef);
+                if (snap.exists()) {
+                    const s = snap.data();
+                    data = s.data;
+                    swallowMarks = s.swallowMarks || [];
+                    segments = s.segments || [];
+                    ui.segSection.classList.remove('hidden');
+                    updateChart();
+                    updateUI();
+                    notify("Loaded", "Cloud session restored");
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            } catch (e) { notify("Error", "Could not load session"); }
         };
 
         window.deleteSession = async (id) => {
-            if (!currentUser || !confirm("Delete this session permanently?")) return;
+            if (!currentUser || !confirm("Delete this session forever?")) return;
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id));
+                const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id);
+                await deleteDoc(docRef);
                 notify("Deleted", "Cloud record removed");
-            } catch (e) {}
+            } catch (e) { notify("Error", "Delete failed"); }
         };
 
         ui.swallow.onclick = () => {
@@ -587,12 +599,12 @@
             if (recording) return;
             if (!ui.segmentToggle.checked) {
                 const point = data[idx];
-                notify(`Beat Details`, `${point.bpm.toFixed(1)} BPM at ${point.t.toFixed(1)}s`);
+                notify(`Details`, `${point.bpm.toFixed(1)} BPM at ${point.t.toFixed(1)}s`);
                 return;
             }
             if (selStart === null) {
                 selStart = idx;
-                notify("Selection Start", "Pick the end point");
+                notify("Selection", "Pick the end point");
             } else {
                 const s = Math.min(selStart, idx), e = Math.max(selStart, idx);
                 if (s !== e) {
