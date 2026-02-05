@@ -37,6 +37,9 @@
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #3b82f6; }
         input:checked + .slider:before { transform: translateX(20px); }
+
+        .sync-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-900 select-none">
@@ -113,6 +116,10 @@
                 <div id="timerDisplay" class="hidden absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-white z-10 p-4 text-center">
                     <span class="text-[9px] font-black uppercase tracking-[0.3em] opacity-60 mb-1 leading-none">Recording...</span>
                     <div id="countdown" class="text-5xl font-mono font-black mb-4 leading-none">00:00</div>
+                    <div id="cloudSyncing" class="hidden mb-4 items-center gap-2 text-[8px] font-black uppercase text-blue-400 sync-pulse">
+                        <div class="w-1.5 h-1.5 rounded-full bg-current"></div>
+                        Cloud Syncing...
+                    </div>
                     <div class="flex gap-2 w-full max-w-[280px]">
                         <button id="swallowBtn" class="flex-1 bg-purple-600 text-white py-3 rounded-xl font-black uppercase text-[10px] shadow-lg active:scale-90 transition-all">Swallow</button>
                         <button id="stopEarlyBtn" class="bg-slate-700 text-white px-4 py-3 rounded-xl font-black uppercase text-[10px] active:bg-red-600">Stop</button>
@@ -251,58 +258,65 @@
             loginBtn: document.getElementById('loginBtn'),
             logoutBtn: document.getElementById('logoutBtn'),
             userProfile: document.getElementById('userProfile'),
-            userName: document.getElementById('userName')
+            userName: document.getElementById('userName'),
+            syncLabel: document.getElementById('cloudSyncing')
         };
 
-        // Helper to notify user with domain instructions
         function handleAuthError(error) {
             console.error("Auth error:", error);
             if (error.code === 'auth/unauthorized-domain') {
                 const domain = window.location.hostname;
-                notify("Configuration Error", `Add domain "${domain}" to Firebase Authorized Domains in settings.`);
-                console.warn(`[SenseHRV] Unauthorized Domain detected. Please whitelist "${domain}" in Firebase Console -> Authentication -> Settings -> Authorized domains.`);
+                notify("Domain Blocked", "Allow this domain in Firebase console");
+                // Log clear instructions in console for the user
+                console.error(`[SenseHRV] FIREBASE ERROR: Unauthorized domain. Please follow these steps:
+                1. Go to Firebase Console -> Authentication -> Settings -> Authorized Domains.
+                2. Click 'Add domain' and enter: ${domain}
+                3. Refresh this page.`);
             } else if (error.code === 'auth/operation-not-allowed') {
-                notify("Operation Error", "Ensure Google Sign-in is enabled in Firebase Authentication console.");
+                notify("Login Disabled", "Enable Google Sign-in in Firebase Console");
             } else {
-                notify("Auth Error", error.message);
+                notify("Auth Alert", error.message);
             }
         }
 
         // Initialize Firebase Auth
         async function initAuth() {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                }
-                if (!auth.currentUser) {
-                    await signInAnonymously(auth);
-                }
+                // Wait for initial auth state check
+                onAuthStateChanged(auth, async (user) => {
+                    currentUser = user;
+                    if (user && !user.isAnonymous) {
+                        ui.loginBtn.classList.add('hidden');
+                        ui.userProfile.classList.remove('hidden');
+                        ui.userName.innerText = user.displayName || 'User';
+                        loadHistory();
+                        checkActiveSession();
+                    } else if (user && user.isAnonymous) {
+                        ui.loginBtn.classList.remove('hidden');
+                        ui.userProfile.classList.add('hidden');
+                        loadHistory();
+                        checkActiveSession();
+                    } else {
+                        // If completely logged out, sign in anonymously to allow cloud features
+                        try {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await signInWithCustomToken(auth, __initial_auth_token);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        } catch (e) {
+                            handleAuthError(e);
+                        }
+                    }
+                });
             } catch (error) {
                 handleAuthError(error);
             }
         }
 
-        onAuthStateChanged(auth, (user) => {
-            currentUser = user;
-            if (user && !user.isAnonymous) {
-                ui.loginBtn.classList.add('hidden');
-                ui.userProfile.classList.remove('hidden');
-                ui.userName.innerText = user.displayName || 'User';
-                loadHistory();
-                checkActiveSession();
-            } else {
-                ui.loginBtn.classList.remove('hidden');
-                ui.userProfile.classList.add('hidden');
-                if (user) {
-                    loadHistory();
-                    checkActiveSession();
-                }
-            }
-        });
-
         async function loginWithGoogle() {
             try {
-                notify("Signing in...", "Google Authentication");
+                notify("Sign-in initiated", "Opening Google Popup...");
                 await signInWithPopup(auth, googleProvider);
             } catch (error) {
                 handleAuthError(error);
@@ -433,12 +447,13 @@
                 await saveToCloud();
                 await clearActiveSession();
             }
-            notify("Finished", "Saving...");
+            notify("Analysis Ready", "Segment your data");
             updateChart();
         }
 
         async function syncActiveSession() {
             if (!currentUser || !recording) return;
+            ui.syncLabel.classList.remove('hidden');
             try {
                 const activeRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current');
                 await setDoc(activeRef, {
@@ -448,7 +463,8 @@
                     duration: ui.duration.value,
                     lastUpdated: serverTimestamp()
                 });
-            } catch (e) {}
+            } catch (e) { console.error(e); }
+            setTimeout(() => ui.syncLabel.classList.add('hidden'), 500);
         }
 
         async function checkActiveSession() {
@@ -466,7 +482,7 @@
                         ui.duration.value = s.duration;
                         ui.segSection.classList.remove('hidden');
                         updateChart();
-                        notify("Recovered", "Restored active session");
+                        notify("Auto-Recovered", "Restored interrupted session");
                     }
                 }
             } catch (e) {}
@@ -491,11 +507,11 @@
                     swallowMarks: swallowMarks,
                     segments: segments,
                     userId: currentUser.uid,
-                    userName: currentUser.displayName || 'Anonymous'
+                    userName: currentUser.displayName || 'User'
                 });
                 loadHistory();
             } catch (e) {
-                notify("Save Error", e.message);
+                notify("Sync Failed", "Check cloud connection");
             }
         }
 
@@ -538,12 +554,12 @@
                 ui.segSection.classList.remove('hidden');
                 updateChart();
                 updateUI();
-                notify("Loaded", "Session restored");
+                notify("Success", "Session loaded");
             }
         };
 
         window.deleteSession = async (id) => {
-            if (!currentUser || !confirm("Delete session?")) return;
+            if (!currentUser || !confirm("Delete session permanently?")) return;
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id));
                 loadHistory();
@@ -554,7 +570,7 @@
         ui.swallow.onclick = () => {
             if (!recording) return;
             swallowMarks.push((Date.now() - startTime) / 1000);
-            notify("Swallow Marked", "Logged");
+            notify("Marker Set", "Interval logged");
         };
 
         function autoSegment() {
