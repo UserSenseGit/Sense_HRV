@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sense HRV V1</title>
+    <title>Sense HRV</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
@@ -28,11 +28,9 @@
         }
 
         .chart-container { position: relative; height: 280px; width: 100%; }
-        .quality-glow { box-shadow: 0 0 10px currentColor; }
         input[type="number"]::-webkit-inner-spin-button { display: none; }
         .trim-btn { @apply w-10 h-10 flex items-center justify-center bg-slate-100 rounded-lg active:bg-slate-200 font-bold text-slate-700 shadow-sm text-lg; }
         
-        /* Toggle Switch Styles */
         .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .4s; border-radius: 24px; }
@@ -46,7 +44,7 @@
     <div class="max-w-md mx-auto p-4 pb-24">
         <header class="flex justify-between items-center mb-4">
             <div>
-                <h1 class="text-xl font-black text-slate-800 tracking-tighter uppercase leading-none">Sense HRV V1</h1>
+                <h1 class="text-xl font-black text-slate-800 tracking-tighter uppercase leading-none">Sense HRV</h1>
                 <div class="flex items-center gap-2 mt-1">
                     <div id="statusDot" class="w-2 h-2 bg-red-500 rounded-full"></div>
                     <span id="statusText" class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Disconnected</span>
@@ -96,7 +94,7 @@
         </div>
 
         <main class="mt-2 space-y-4">
-            <!-- Live Dashboard & Timer -->
+            <!-- Live Dashboard -->
             <section class="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
                 <div id="timerDisplay" class="hidden absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-white z-10 p-4 text-center">
                     <span class="text-[9px] font-black uppercase tracking-[0.3em] opacity-60 mb-1 leading-none">Recording...</span>
@@ -112,14 +110,14 @@
                         <span class="text-[8px] font-black text-slate-300 uppercase leading-none mb-1">Signal Quality</span>
                         <div id="qualityIndicator" class="flex items-center gap-2 px-2 py-1 bg-slate-100 rounded-full text-slate-400">
                             <div id="qualityDot" class="w-1.5 h-1.5 rounded-full bg-current"></div>
-                            <span id="qualityText" class="text-[8px] font-black uppercase">No Data</span>
+                            <span id="qualityText" class="text-[8px] font-black uppercase tracking-widest">No Data</span>
                         </div>
                     </div>
                     <div class="text-right">
                         <span class="text-[8px] font-black text-slate-300 uppercase leading-none mb-1">Live HR</span>
                         <div class="flex items-baseline justify-end gap-1">
                             <span id="liveHR" class="text-xl font-mono font-black text-red-500 leading-none">--</span>
-                            <span class="text-[8px] font-bold text-slate-300 uppercase">BPM</span>
+                            <span class="text-[8px] font-bold text-slate-300 uppercase tracking-widest leading-none">BPM</span>
                         </div>
                     </div>
                 </div>
@@ -135,23 +133,23 @@
                 </div>
             </section>
 
-            <!-- Smart Limits -->
+            <!-- Auto-Filter -->
             <section class="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100">
                 <h2 class="text-[9px] font-black uppercase text-slate-400 mb-4 tracking-widest leading-none">Auto-Filter</h2>
                 <div class="grid grid-cols-2 gap-4 mb-4">
                     <div class="bg-slate-50 p-3 rounded-2xl flex flex-col items-center">
-                        <span class="text-[8px] font-black text-slate-400 uppercase mb-2 leading-none">Floor</span>
+                        <span class="text-[8px] font-black text-slate-400 uppercase mb-2 leading-none text-center">Floor</span>
                         <input type="number" id="limitMin" value="45" class="bg-transparent text-xl font-mono font-black text-center w-full outline-none text-slate-700 leading-none">
                     </div>
                     <div class="bg-slate-50 p-3 rounded-2xl flex flex-col items-center border-l border-white">
-                        <span class="text-[8px] font-black text-slate-400 uppercase mb-2 leading-none">Ceiling</span>
+                        <span class="text-[8px] font-black text-slate-400 uppercase mb-2 leading-none text-center">Ceiling</span>
                         <input type="number" id="limitMax" value="85" class="bg-transparent text-xl font-mono font-black text-center w-full outline-none text-slate-700 leading-none">
                     </div>
                 </div>
                 <button id="autoSegmentBtn" class="w-full py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest active:bg-blue-100 transition-colors">Apply Auto-Filter</button>
             </section>
 
-            <!-- Analysis & Segments -->
+            <!-- Segments -->
             <section id="segmentSection" class="hidden bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100">
                 <div class="flex justify-between items-center mb-6 px-1">
                     <h2 class="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none">Segments</h2>
@@ -159,20 +157,52 @@
                 </div>
                 <div id="segmentList" class="space-y-6"></div>
             </section>
+
+            <!-- History Section -->
+            <section id="historySection" class="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 mb-8">
+                <h2 class="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest leading-none">History (Cloud)</h2>
+                <div id="historyList" class="space-y-3">
+                    <p class="text-[10px] text-slate-400 italic text-center py-4">Loading history...</p>
+                </div>
+            </section>
         </main>
     </div>
 
-    <!-- Toast -->
     <div id="toast" class="bg-slate-900 text-white px-6 py-4 rounded-3xl shadow-2xl flex flex-col items-center text-center">
         <span id="tMsg" class="font-black text-xs uppercase tracking-widest"></span>
         <span id="tSub" class="text-[9px] opacity-60 mt-1 font-bold"></span>
     </div>
 
-    <script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAnalytics } from "firebase/analytics";
+
+        // --- Firebase Setup ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyB8KbT2kJ9nF29MZksTEADcCGpqjk3T_Ys",
+            authDomain: "sense-hrv.firebaseapp.com",
+            projectId: "sense-hrv",
+            storageBucket: "sense-hrv.firebasestorage.app",
+            messagingSenderId: "1051307537583",
+            appId: "1:1051307537583:web:e116fc6ff5bd011d94505a",
+            measurementId: "G-5V8CYX16HG"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sense-hrv';
+
+        let currentUser = null;
+
+        // --- App Logic ---
         const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#22c55e', '#ef4444', '#6366f1'];
         let device, hrChar, recording = false, startTime = 0, timerInterval;
         let data = [], segments = [], selStart = null, swallowMarks = [], chart;
         let lastRRIntervals = [];
+        let lastSyncTime = 0; // For automatic saving during recording
 
         const ui = {
             connect: document.getElementById('connectBtn'),
@@ -202,8 +232,31 @@
             tSub: document.getElementById('tSub'),
             limitMin: document.getElementById('limitMin'),
             limitMax: document.getElementById('limitMax'),
-            segmentToggle: document.getElementById('segmentToggle')
+            segmentToggle: document.getElementById('segmentToggle'),
+            historyList: document.getElementById('historyList')
         };
+
+        // Initialize Firebase Auth (Rule 3)
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth failed:", error);
+                notify("Auth Error", "Cloud features disabled");
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user) {
+                loadHistory();
+                checkActiveSession(); // Check for interrupted recordings
+            }
+        });
 
         function initChart() {
             const ctx = document.getElementById('mainChart').getContext('2d');
@@ -256,6 +309,12 @@
                                 const time = (Date.now() - startTime) / 1000;
                                 data.push({ t: time, rr: rr, bpm: 60000 / rr });
                                 updateChart();
+                                
+                                // Auto-sync every 2 seconds to prevent data loss on refresh
+                                if (Date.now() - lastSyncTime > 2000) {
+                                    syncActiveSession();
+                                    lastSyncTime = Date.now();
+                                }
                             }
                         }
                     }
@@ -286,11 +345,16 @@
         function startRecording() {
             data = []; segments = []; swallowMarks = []; selStart = null;
             startTime = Date.now(); recording = true;
+            lastSyncTime = Date.now();
             ui.timerDisplay.classList.remove('hidden');
             ui.resCard.classList.add('hidden');
             ui.segSection.classList.add('hidden');
             chart.data.datasets[0].data = [];
             chart.resetZoom(); chart.update();
+            
+            // Create initial empty active session in cloud
+            syncActiveSession();
+
             const totalTime = parseInt(ui.duration.value);
             timerInterval = setInterval(() => {
                 const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -304,14 +368,145 @@
             }, 1000);
         }
 
-        function stopRecording() {
+        async function stopRecording() {
             clearInterval(timerInterval);
             recording = false;
             ui.timerDisplay.classList.add('hidden');
-            if (data.length) ui.segSection.classList.remove('hidden');
-            notify("Finished", "Review data");
+            if (data.length) {
+                ui.segSection.classList.remove('hidden');
+                await saveToCloud();
+                await clearActiveSession(); // Cleanup interrupted cache
+            }
+            notify("Finished", "Syncing to cloud...");
             updateChart();
         }
+
+        // --- Cloud Operations (Rules 1 & 2) ---
+
+        // NEW: Sync current data during recording
+        async function syncActiveSession() {
+            if (!currentUser || !recording) return;
+            try {
+                const activeRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current');
+                await setDoc(activeRef, {
+                    startTime: startTime,
+                    data: data,
+                    swallowMarks: swallowMarks,
+                    duration: ui.duration.value,
+                    lastUpdated: serverTimestamp()
+                });
+            } catch (e) {
+                console.error("Sync failed:", e);
+            }
+        }
+
+        // NEW: Check for interrupted sessions on load
+        async function checkActiveSession() {
+            if (!currentUser) return;
+            try {
+                const activeRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current');
+                const snap = await getDoc(activeRef);
+                if (snap.exists()) {
+                    const s = snap.data();
+                    // If the session is older than 30 minutes, ignore it, otherwise offer recovery
+                    const ageInMs = Date.now() - (s.lastUpdated?.toMillis() || 0);
+                    if (ageInMs < 1800000 && s.data.length > 0) {
+                        data = s.data;
+                        swallowMarks = s.swallowMarks || [];
+                        startTime = s.startTime;
+                        ui.duration.value = s.duration;
+                        ui.segSection.classList.remove('hidden');
+                        updateChart();
+                        notify("Recovered!", "Interrupted session restored");
+                    }
+                }
+            } catch (e) {
+                console.error("Recovery check failed:", e);
+            }
+        }
+
+        async function clearActiveSession() {
+            if (!currentUser) return;
+            try {
+                const activeRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'active', 'current');
+                await deleteDoc(activeRef);
+            } catch (e) {
+                console.error("Cleanup failed:", e);
+            }
+        }
+
+        async function saveToCloud() {
+            if (!currentUser) return;
+            try {
+                const sessionId = `session_${Date.now()}`;
+                const sessionRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', sessionId);
+                await setDoc(sessionRef, {
+                    timestamp: serverTimestamp(),
+                    duration: ui.duration.value,
+                    data: data,
+                    swallowMarks: swallowMarks,
+                    segments: segments
+                });
+                loadHistory();
+            } catch (e) {
+                console.error("Save failed:", e);
+                notify("Cloud Error", "Failed to save session");
+            }
+        }
+
+        async function loadHistory() {
+            if (!currentUser) return;
+            try {
+                const q = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions');
+                const snapshot = await getDocs(q);
+                const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                sessions.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+
+                ui.historyList.innerHTML = sessions.length ? '' : '<p class="text-[10px] text-slate-400 italic text-center py-4">No sessions saved yet.</p>';
+                
+                sessions.slice(0, 10).forEach(s => {
+                    const date = s.timestamp ? s.timestamp.toDate().toLocaleString() : 'Saving...';
+                    const div = document.createElement('div');
+                    div.className = "flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100 active:scale-[0.98] transition-transform";
+                    div.innerHTML = `
+                        <div class="flex flex-col gap-0.5" onclick="loadSession('${s.id}')">
+                            <span class="text-[9px] font-black text-slate-800 uppercase leading-none">${date}</span>
+                            <span class="text-[8px] font-bold text-slate-400 uppercase tracking-widest">${s.duration}s Session</span>
+                        </div>
+                        <button onclick="deleteSession('${s.id}')" class="text-red-400 text-lg px-2">&times;</button>
+                    `;
+                    ui.historyList.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Load failed:", e);
+            }
+        }
+
+        window.loadSession = async (id) => {
+            if (!currentUser) return;
+            notify("Loading...", "Fetching data");
+            const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id);
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                const s = snap.data();
+                data = s.data;
+                swallowMarks = s.swallowMarks || [];
+                segments = s.segments || [];
+                ui.segSection.classList.remove('hidden');
+                updateChart();
+                updateUI();
+                notify("Loaded", "Session restored");
+            }
+        };
+
+        window.deleteSession = async (id) => {
+            if (!currentUser || !confirm("Delete this session from cloud?")) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'sessions', id));
+                loadHistory();
+                notify("Deleted", "Session removed");
+            } catch (e) { console.error(e); }
+        };
 
         ui.swallow.onclick = () => {
             if (!recording) return;
@@ -341,15 +536,11 @@
 
         function handlePointClick(idx) {
             if (recording) return;
-            
-            // IF SEGMENTATION IS OFF: Just show value
             if (!ui.segmentToggle.checked) {
                 const point = data[idx];
                 notify(`Beat Info`, `${point.bpm.toFixed(1)} BPM at ${point.t.toFixed(1)}s`);
                 return;
             }
-
-            // IF SEGMENTATION IS ON: Selection logic
             if (selStart === null) {
                 selStart = idx;
                 notify("Selection Start", "Pick an end point");
@@ -416,11 +607,10 @@
                                 </div>
                             </div>
                             <div class="flex gap-2">
-                                <button onclick="toggleBypass(${i})" class="text-[9px] font-black uppercase px-3 py-2 rounded-xl border border-slate-200 active:bg-slate-100 shadow-sm">${seg.bypassed ? 'Restore' : 'Bypass'}</button>
+                                <button onclick="toggleBypass(${i})" class="text-[9px] font-black uppercase px-3 py-2 rounded-xl border border-slate-200 active:bg-slate-100 shadow-sm">Bypass</button>
                                 <button onclick="removeSeg(${i})" class="bg-red-50 text-red-500 font-bold text-xl w-10 h-10 flex items-center justify-center rounded-xl">&times;</button>
                             </div>
                         </div>
-                        
                         <div class="flex items-center justify-between border-t border-slate-50 pt-4 gap-4">
                             <div class="flex flex-col gap-1 flex-1">
                                 <span class="text-[8px] font-black text-slate-300 uppercase text-center">Start Time</span>
@@ -476,9 +666,15 @@
         }
 
         function notify(m, s = "") { ui.tMsg.innerText = m; ui.tSub.innerText = s; ui.toast.classList.add('show'); setTimeout(() => ui.toast.classList.remove('show'), 3000); }
-        ui.connect.onclick = connect; ui.record.onclick = startRecording; ui.stopEarly.onclick = stopRecording;
-        window.onload = initChart;
+        
+        ui.connect.onclick = connect; 
+        ui.record.onclick = startRecording; 
+        ui.stopEarly.onclick = stopRecording;
+        
+        window.onload = () => {
+            initAuth();
+            initChart();
+        };
     </script>
 </body>
 </html>
-
