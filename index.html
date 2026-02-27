@@ -477,15 +477,34 @@
         function calculateGlobal() {
             const active = segments.filter(s => !s.bypassed);
             if (!active.length) { ui.resCard.classList.add('hidden'); return; }
-            let totalSq = 0, diffCount = 0, rrSum = 0, beatCount = 0;
+            
+            let sumWeightedVariance = 0;
+            let totalDiffCount = 0;
+            let rrSum = 0;
+            let beatCount = 0;
+
             active.forEach(seg => {
                 const rr = data.slice(seg.s, seg.e + 1).map(d => d.rr);
-                beatCount += rr.length; rrSum += rr.reduce((a,b)=>a+b,0);
-                for(let i=0; i<rr.length-1; i++) { totalSq += Math.pow(rr[i+1] - rr[i], 2); diffCount++; }
+                if (rr.length < 2) return; // Minimaal 2 intervallen nodig voor de berekening
+
+                beatCount += rr.length; 
+                rrSum += rr.reduce((a, b) => a + b, 0);
+
+                // Haal de RMSSD op van het huidige segment en bereken het gewicht
+                const stats = calcSliceStats(rr);
+                const n_i = rr.length;
+                const diffCount_i = n_i - 1;
+
+                // Voeg de (N_i - 1) * RMSSD_i^2 toe aan de totale variantie
+                sumWeightedVariance += diffCount_i * Math.pow(stats.rmssd, 2);
+                totalDiffCount += diffCount_i;
             });
-            if (diffCount === 0) return;
+
+            if (totalDiffCount === 0) return;
+
+            // Bereken HR en gepoolde RMSSD
             ui.resHR.innerText = Math.round(60000 / (rrSum / beatCount));
-            ui.resRMSSD.innerText = Math.sqrt(totalSq / diffCount).toFixed(1);
+            ui.resRMSSD.innerText = Math.sqrt(sumWeightedVariance / totalDiffCount).toFixed(1);
             ui.resCard.classList.remove('hidden');
         }
 
