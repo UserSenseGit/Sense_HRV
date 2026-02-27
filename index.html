@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sense HRV V1</title>
+    <title>Sense HRV</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
@@ -30,7 +30,7 @@
         .chart-container { position: relative; height: 280px; width: 100%; }
         .quality-glow { box-shadow: 0 0 10px currentColor; }
         input[type="number"]::-webkit-inner-spin-button { display: none; }
-        .trim-btn { @apply w-10 h-10 flex items-center justify-center bg-slate-100 rounded-lg active:bg-slate-200 font-bold text-slate-700 shadow-sm text-lg; }
+        .trim-btn { @apply w-12 h-12 flex items-center justify-center bg-slate-100 rounded-xl active:bg-slate-200 font-black text-slate-700 shadow-sm text-xl; }
         
         /* Toggle Switch Styles */
         .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
@@ -46,7 +46,7 @@
     <div class="max-w-md mx-auto p-4 pb-24">
         <header class="flex justify-between items-center mb-4">
             <div>
-                <h1 class="text-xl font-black text-slate-800 tracking-tighter uppercase leading-none">Sense HRV V1</h1>
+                <h1 class="text-xl font-black text-slate-800 tracking-tighter uppercase leading-none">Sense HRV</h1>
                 <div class="flex items-center gap-2 mt-1">
                     <div id="statusDot" class="w-2 h-2 bg-red-500 rounded-full"></div>
                     <span id="statusText" class="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Disconnected</span>
@@ -58,8 +58,7 @@
         <div class="sticky-header">
             <!-- Global Results -->
             <div id="resultCard" class="hidden bg-white border-2 border-slate-900 p-4 rounded-[2rem] shadow-xl mb-3 overflow-hidden">
-                <div class="flex justify-between items-center mb-2 px-2">
-                    <span class="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">HRV4Training Manual Input</span>
+                <div class="flex justify-end items-center mb-2 px-2">
                     <span id="activeCount" class="text-[8px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full leading-none">0 segments</span>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
@@ -168,6 +167,18 @@
         <span id="tSub" class="text-[9px] opacity-60 mt-1 font-bold"></span>
     </div>
 
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 shadow-2xl max-w-sm w-full text-center transform scale-95 transition-transform duration-200">
+            <h3 class="text-lg font-black text-slate-800 uppercase tracking-widest mb-2">Nieuwe opname starten?</h3>
+            <p class="text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider">Huidige data gaat verloren</p>
+            <div class="flex justify-center gap-4">
+                <button id="cancelRecordBtn" class="w-14 h-14 bg-slate-100 text-slate-500 rounded-2xl flex items-center justify-center text-2xl active:bg-slate-200 transition-colors">✖</button>
+                <button id="confirmRecordBtn" class="w-14 h-14 bg-green-500 text-white rounded-2xl flex items-center justify-center text-2xl shadow-lg active:scale-95 transition-transform">✔</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#22c55e', '#ef4444', '#6366f1'];
         let device, hrChar, recording = false, startTime = 0, timerInterval;
@@ -202,7 +213,10 @@
             tSub: document.getElementById('tSub'),
             limitMin: document.getElementById('limitMin'),
             limitMax: document.getElementById('limitMax'),
-            segmentToggle: document.getElementById('segmentToggle')
+            segmentToggle: document.getElementById('segmentToggle'),
+            confirmModal: document.getElementById('confirmModal'),
+            cancelRecord: document.getElementById('cancelRecordBtn'),
+            confirmRecord: document.getElementById('confirmRecordBtn')
         };
 
         function initChart() {
@@ -476,7 +490,30 @@
         }
 
         function notify(m, s = "") { ui.tMsg.innerText = m; ui.tSub.innerText = s; ui.toast.classList.add('show'); setTimeout(() => ui.toast.classList.remove('show'), 3000); }
-        ui.connect.onclick = connect; ui.record.onclick = startRecording; ui.stopEarly.onclick = stopRecording;
+        
+        ui.connect.onclick = connect; 
+        
+        ui.record.onclick = () => {
+            if (data.length > 0) {
+                ui.confirmModal.classList.remove('hidden');
+                setTimeout(() => ui.confirmModal.firstElementChild.classList.replace('scale-95', 'scale-100'), 10);
+            } else {
+                startRecording();
+            }
+        };
+
+        ui.cancelRecord.onclick = () => {
+            ui.confirmModal.firstElementChild.classList.replace('scale-100', 'scale-95');
+            setTimeout(() => ui.confirmModal.classList.add('hidden'), 200);
+        };
+
+        ui.confirmRecord.onclick = () => {
+            ui.confirmModal.firstElementChild.classList.replace('scale-100', 'scale-95');
+            setTimeout(() => ui.confirmModal.classList.add('hidden'), 200);
+            startRecording();
+        };
+
+        ui.stopEarly.onclick = stopRecording;
         window.onload = initChart;
     </script>
 </body>
