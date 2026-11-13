@@ -9,8 +9,8 @@
 //                     ≤ 2,5 boven, anders ongewoon hoog; z > 1,5 met negatief gevoel ook
 //                     ongewoon hoog                                                              → 97 % gelijk aan H4T-adviezen
 // - kleur dagadvies  = onder+negatief rood, onder+positief of binnen+negatief geel, anders groen → 88 % (60 d, webversie)
-// - subjectieve trend = gemiddelde z (vandaag t.o.v. 60 dagen) van slaapkwaliteit, motivatie en
-//                     spierpijn (omgekeerd); negatief als < −0,3                                → 85 % gelijk aan H4T-adviezen
+// - subjectieve trend = gemiddelde z (t.o.v. 60 dagen) van slaapkwaliteit, motivatie en spierpijn
+//                     (omgekeerd), gewogen 70 % vandaag / 30 % vorige trend; negatief als < −0,3 → 87 % gelijk aan H4T-adviezen
 // De indeling van de 14-dagentrend (gaat goed / stabiel / maladaptatie / opgestapelde vermoeidheid)
 // is een eigen interpretatie: het algoritme van HRV4Training is niet openbaar.
 
@@ -117,7 +117,10 @@ export function buildSeries(records, { until = isoDate() } = {}) {
     }
     const subj = ['sleepQuality', 'motivation', 'soreness'].map((k) => d.pz[k]).filter((v) => v != null);
     d.subjective = subj.length ? mean(subj) : null;
-    d.subjTrend = d.subjective == null ? null : d.subjective < -0.3 ? 'neg' : 'pos';
+    // Trend = gewogen gemiddelde: vandaag 70 %, de trend van de vorige dagen 30 %.
+    const prev = i > 0 ? days[i - 1].subjEwma : null;
+    d.subjEwma = d.subjective == null ? prev ?? null : prev == null ? d.subjective : 0.7 * d.subjective + 0.3 * prev;
+    d.subjTrend = d.subjective == null || d.subjEwma == null ? null : d.subjEwma < -0.3 ? 'neg' : 'pos';
     // Zoals HRV4Training: hoge HRV (z > 1,5) samen met een slecht gevoel geldt als 'ongewoon hoog'.
     if (d.z != null && d.z > 1.5 && d.subjTrend === 'neg') d.category = 'unusual';
   }
