@@ -6,7 +6,9 @@
 // - HR-band         = 60 dagen, gemiddelde ± 1 SD                                               → 55–61 (H4T: 55–61)
 // - CV              = SD / gemiddelde van ln(rMSSD) over 7 dagen × 100                          → 4,6 % (H4T: 4,5 %)
 // - HRV-categorie   = z van ln(rMSSD) t.o.v. 60 dagen: < −1 onder, ≤ 1 binnen, ≤ 1,5 iets boven,
-//                     ≤ 2,5 boven, anders ongewoon hoog                                          → 96 % gelijk aan H4T-adviezen
+//                     ≤ 2,5 boven, anders ongewoon hoog; z > 1,5 met negatief gevoel ook
+//                     ongewoon hoog                                                              → 97 % gelijk aan H4T-adviezen
+// - kleur dagadvies  = onder+negatief rood, onder+positief of binnen+negatief geel, anders groen → 88 % (60 d, webversie)
 // - subjectieve trend = gemiddelde z (vandaag t.o.v. 60 dagen) van slaapkwaliteit, motivatie en
 //                     spierpijn (omgekeerd); negatief als < −0,3                                → 85 % gelijk aan H4T-adviezen
 // De indeling van de 14-dagentrend (gaat goed / stabiel / maladaptatie / opgestapelde vermoeidheid)
@@ -116,6 +118,8 @@ export function buildSeries(records, { until = isoDate() } = {}) {
     const subj = ['sleepQuality', 'motivation', 'soreness'].map((k) => d.pz[k]).filter((v) => v != null);
     d.subjective = subj.length ? mean(subj) : null;
     d.subjTrend = d.subjective == null ? null : d.subjective < -0.3 ? 'neg' : 'pos';
+    // Zoals HRV4Training: hoge HRV (z > 1,5) samen met een slecht gevoel geldt als 'ongewoon hoog'.
+    if (d.z != null && d.z > 1.5 && d.subjTrend === 'neg') d.category = 'unusual';
   }
   return { days, byDate: new Map(days.map((d) => [d.date, d])) };
 }
@@ -141,10 +145,13 @@ export function advice(d) {
   const subj = d.subjTrend == null ? '' : neg ? ' maar je subjectieve scores dalen' : ' en je subjectieve scores zijn goed';
   switch (d.category) {
     case 'below':
-      return { level: 'alert', title: neg ? 'Rust of herstel vandaag' : 'Rustig aan vandaag', text: `Je HRV ligt onder je normale band${subj}.` };
+      // Zoals HRV4Training: onder de band + goed gevoel = 'take it easy' (geel), + slecht gevoel = 'limit intensity' (rood).
+      return neg
+        ? { level: 'alert', title: 'Beperk intensiteit vandaag', text: `Je HRV ligt onder je normale band${subj}.` }
+        : { level: 'warn', title: 'Doe het rustig aan', text: `Je HRV ligt onder je normale band${subj}.` };
     case 'within':
       return neg
-        ? { level: 'warn', title: 'Beperk intensiteit vandaag', text: `Je HRV ligt binnen je normale band${subj}.` }
+        ? { level: 'warn', title: 'Doe het rustig aan', text: `Je HRV ligt binnen je normale band${subj}.` }
         : { level: 'ok', title: 'Ga verder zoals gepland', text: `Je HRV ligt binnen je normale band${subj}.` };
     case 'slight':
       return { level: neg ? 'warn' : 'ok', title: neg ? 'Luister naar je lichaam' : 'Ga verder zoals gepland', text: `Je HRV ligt iets boven je normale band${subj}.` };
@@ -230,7 +237,7 @@ export function readinessSeries(days, params) {
 export function readinessAdvice(d) {
   if (d?.readiness == null) return null;
   if (d.rdLo == null) return { level: 'muted', title: 'Nog te weinig data', text: 'Minstens 14 dagen met deze parameters nodig.' };
-  if (d.readiness < d.rdLo) return { level: 'warn', title: 'Beperk intensiteit vandaag', text: 'Je readiness-score ligt onder je normale band.' };
+  if (d.readiness < d.rdLo) return { level: 'warn', title: 'Doe het rustig aan', text: 'Je readiness-score ligt onder je normale band.' };
   if (d.readiness > d.rdHi) return { level: 'ok', title: 'Klaar om te presteren', text: 'Je readiness-score ligt boven je normale band.' };
   return { level: 'ok', title: 'Ga verder zoals gepland', text: 'Je readiness-score ligt binnen je normale band.' };
 }
