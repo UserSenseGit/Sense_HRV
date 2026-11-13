@@ -4,9 +4,10 @@ import { $, longDate, isoDate } from './util.js';
 import { initMeasure } from './measure.js';
 import { renderToday, renderHistory, renderMore } from './views.js';
 import { closeTags } from './tags.js';
+import { renderTrends } from './trends.js';
 
 const VIEWS = ['vandaag', 'meten', 'historiek', 'trends', 'meer'];
-const RENDER = { vandaag: renderToday, historiek: renderHistory, meer: renderMore };
+const RENDER = { vandaag: renderToday, historiek: renderHistory, trends: renderTrends, meer: renderMore };
 let currentView = 'vandaag';
 
 function navigate(view) {
