@@ -1,7 +1,8 @@
 // Schermen Vandaag, Historiek en Meer.
 
 import { $, esc, notify, confirmDialog, isoDate, addDays, niceDate, longDate, dayShort, monthName, parseIso, fmtHours } from './util.js';
-import { getAll, getDay, deleteDay, clearAll, count, isPersisted, requestPersist } from './db.js';
+import { getAll, getDay, deleteDay, clearAll, count, isPersisted, requestPersist, getActivities, clearActivities } from './db.js';
+import { icuConfig, icuConnected, icuSave, icuDisconnect, icuTest, icuSync } from './intervals.js';
 import { openTags, TRAINING, ALCOHOL, customTagNames, setCustomTagNames } from './tags.js';
 import { loadMeasurement } from './measure.js';
 import { loadSeries, lastMeasuredIndex, valueColor, adviceCard, renderWeek } from './trends.js';
@@ -231,6 +232,8 @@ export async function renderMore() {
   const el = $('view-meer');
   const n = await count();
   const persisted = await isPersisted();
+  const icu = icuConfig();
+  const nAct = (await getActivities()).length;
   el.innerHTML = `
     <h2 class="view-title">Meer</h2>
     <div class="card stack">
@@ -243,6 +246,21 @@ export async function renderMore() {
       <div class="card-title" style="margin: 0;">Exporteren</div>
       <button class="btn btn-block" id="expBackup">Back-up downloaden (JSON, met ruwe data)</button>
       <button class="btn btn-block" id="expCsv">Tabel downloaden (CSV voor Excel)</button>
+    </div>
+    <div class="card stack">
+      <div class="card-title" style="margin: 0;">Intervals.icu</div>
+      ${icuConnected() ? `
+        <dl class="kv" style="margin: 0;"><dt>Athlete-ID</dt><dd>${esc(icu.athleteId)}</dd>
+          <dt>Activiteiten</dt><dd>${nAct}</dd>
+          <dt>Laatst gesynchroniseerd</dt><dd>${icu.lastSync ? esc(new Date(icu.lastSync).toLocaleString('nl-BE', { dateStyle: 'short', timeStyle: 'short' })) : '–'}</dd></dl>
+        <button class="btn btn-block" id="icuSync">Nu synchroniseren</button>
+        <button class="btn btn-block btn-ghost" id="icuFull">Alles opnieuw ophalen (2 jaar)</button>
+        <button class="btn btn-danger btn-block" id="icuOff">Ontkoppelen</button>` : `
+        <p class="small muted" style="margin: 0;">Haalt je trainingen (duur, afstand, hartslag) automatisch op. Je vindt beide gegevens in Intervals.icu onder Settings → Developer Settings.</p>
+        <div><label class="lbl" for="icuId">Athlete-ID (bv. i12345)</label><input class="input" id="icuId" autocomplete="off" autocapitalize="off"></div>
+        <div><label class="lbl" for="icuKey">API-sleutel</label><input class="input" id="icuKey" type="password" autocomplete="off"></div>
+        <button class="btn btn-primary btn-block" id="icuConnect">Koppelen</button>
+        <p class="small muted" style="margin: 0;">De sleutel blijft op dit toestel en gaat alleen via je eigen Vercel-app naar Intervals.icu.</p>`}
     </div>
     <div class="card stack">
       <div class="card-title" style="margin: 0;">Eigen tags</div>
@@ -290,6 +308,34 @@ export async function renderMore() {
   };
   $('expBackup').onclick = async () => notify('Back-up gedownload', `${await exportBackup()} dagen`);
   $('expCsv').onclick = async () => notify('CSV gedownload', `${await exportCsv()} dagen`);
+  const runSync = async (full) => {
+    notify('Synchroniseren…', 'Intervals.icu');
+    try {
+      const n2 = await icuSync({ full });
+      notify('Gesynchroniseerd', `${n2} activiteiten opgehaald`);
+      window.dispatchEvent(new CustomEvent('sense:data'));
+    } catch (err) { notify('Synchroniseren mislukt', err.message); }
+  };
+  if ($('icuConnect')) {
+    $('icuConnect').onclick = async () => {
+      const id = $('icuId').value.trim(), key = $('icuKey').value.trim();
+      if (!/^[A-Za-z0-9_-]{1,32}$/.test(id) || !key) { notify('Vul athlete-ID en sleutel in'); return; }
+      try {
+        const n7 = await icuTest(id, key);
+        icuSave(id, key);
+        notify('Gekoppeld', `${n7} activiteiten in de laatste 7 dagen`);
+        await runSync(true);
+      } catch (err) { notify('Koppelen mislukt', err.message); }
+    };
+  } else {
+    $('icuSync').onclick = () => runSync(false);
+    $('icuFull').onclick = () => runSync(true);
+    $('icuOff').onclick = async () => {
+      if (!(await confirmDialog('Ontkoppelen?', 'De sleutel wordt van dit toestel verwijderd. Opgehaalde activiteiten blijven bewaard.', 'Ontkoppelen', true))) return;
+      icuDisconnect();
+      renderMore();
+    };
+  }
   $('saveCustom').onclick = () => {
     const list = $('customTags').value.split(',').map((s) => s.trim()).filter((s) => s && s.toLowerCase() !== 'extrasystolen');
     setCustomTagNames([...new Set(list)]);
@@ -300,6 +346,7 @@ export async function renderMore() {
   $('wipe').onclick = async () => {
     if (!(await confirmDialog('Alle data wissen?', 'Dit kan niet ongedaan worden. Download eerst een back-up.', 'Alles wissen', true))) return;
     await clearAll();
+    await clearActivities();
     notify('Alle data gewist');
     window.dispatchEvent(new CustomEvent('sense:data'));
   };

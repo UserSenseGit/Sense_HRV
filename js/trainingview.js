@@ -1,7 +1,7 @@
 // Trends → Training: trainingsbelasting, overzichten en intensiteitsverdeling.
 
 import { esc, isoDate, addDays } from './util.js';
-import { getAll } from './db.js';
+import { getAll, getActivities } from './db.js';
 import {
   trainingSettings, setTrainingSetting, sessionsFrom, loadSeries, riskZone, RISK_INFO, summaries, intensity,
   sportsOf, LOAD_METRICS, restingHr,
@@ -32,7 +32,8 @@ function axisOpts(extra = {}) {
 export async function renderTraining(el, toggle) {
   const settings = trainingSettings();
   const records = await getAll();
-  const sessions = sessionsFrom(records, settings);
+  const activities = await getActivities();
+  const sessions = sessionsFrom(records, settings, activities);
   if (!sessions.length) {
     el.innerHTML = `<h2 class="view-title">Trends</h2>${toggle}<div class="card empty">Nog geen trainingen. Vul ze in bij de tags, of importeer je HRV4Training-geschiedenis via Meer.</div>`;
     return;
@@ -135,7 +136,7 @@ export async function renderTraining(el, toggle) {
         <div><label class="lbl" for="setHrRest">Rust-HR</label><input class="input" id="setHrRest" type="number" inputmode="numeric" placeholder="${hrRest} (auto)" value="${settings.hrRest ?? ''}"></div>
         <div><label class="lbl" for="setThr">Grens %</label><input class="input" id="setThr" type="number" inputmode="numeric" value="${settings.thresholdPct}"></div>
       </div>
-      <p class="small muted" style="margin: 0;">Rust-HR leeg = mediaan van je ochtend-HR (nu ${hrRest}). ${metric === 'trimp' && estimated ? `${estimated} van de ${recent.length} trainingen van de laatste 90 dagen hebben geen hartslag; hun TRIMP is geschat.` : ''}</p>
+      <p class="small muted" style="margin: 0;">Rust-HR leeg = mediaan van je ochtend-HR (nu ${hrRest}). ${activities.length ? `${activities.length} activiteiten uit Intervals.icu.` : ''} ${metric === 'trimp' && estimated ? `${estimated} van de ${recent.length} trainingen van de laatste 90 dagen hebben geen hartslag; hun TRIMP is geschat.` : ''}</p>
     </div>`;
 
   // Bediening

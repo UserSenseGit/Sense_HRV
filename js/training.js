@@ -57,14 +57,34 @@ export function trimpOf(minutes, avgHr, hrRest, hrMax) {
  * Sessies uit de dagrecords. Geïmporteerde dagen (HRV4Training) bevatten de training van die dag zelf;
  * het Sense-formulier vraagt naar 'training gisteren', dus die sessie hoort bij de dag ervoor.
  */
-export function sessionsFrom(records, settings = trainingSettings()) {
+/** Trainingstype afgeleid van de gemiddelde hartslag (voor activiteiten uit Intervals.icu). */
+export function typeFromHr(avgHr, settings = trainingSettings()) {
+  if (!avgHr) return 'average';
+  const thr = (settings.hrMax * settings.thresholdPct) / 100;
+  if (avgHr >= thr) return 'intense';
+  if (avgHr < settings.hrMax * 0.6) return 'easy';
+  return 'average';
+}
+
+export function sessionsFrom(records, settings = trainingSettings(), activities = []) {
   const hrRest = restingHr(records, settings);
   const out = [];
+  // Activiteiten uit Intervals.icu gaan voor: op die dagen tellen de handmatige/geïmporteerde trainingen niet mee.
+  const actDates = new Set(activities.map((a) => a.date));
+  for (const a of activities) {
+    const type = typeFromHr(a.avgHr, settings);
+    out.push({
+      date: a.date, type, sport: a.sport, durationMin: a.movingMin || 0, distanceKm: a.distanceKm || 0,
+      rpe: a.rpe ?? RPE_FALLBACK[type], rpeEstimated: a.rpe == null, avgHr: a.avgHr ?? null,
+      trimp: trimpOf(a.movingMin, a.avgHr, hrRest, settings.hrMax), source: 'intervals',
+    });
+  }
   for (const r of records) {
     const t = r.tags || {};
     if (!t.training || t.training === 'rest') continue;
     if (!t.durationMin && !t.distanceKm) continue;
     const date = r.source === 'hrv4t' ? r.date : addDays(r.date, -1);
+    if (actDates.has(date)) continue;
     out.push({
       date,
       type: t.training,

@@ -5,6 +5,7 @@ import { initMeasure } from './measure.js';
 import { renderToday, renderHistory, renderMore } from './views.js';
 import { closeTags } from './tags.js';
 import { renderTrends } from './trends.js';
+import { icuAutoSync } from './intervals.js';
 
 const VIEWS = ['vandaag', 'meten', 'historiek', 'trends', 'meer'];
 const RENDER = { vandaag: renderToday, historiek: renderHistory, trends: renderTrends, meer: renderMore };
@@ -32,6 +33,8 @@ function init() {
   let start = 'vandaag';
   try { start = sessionStorage.getItem('sense.view') || 'vandaag'; } catch { /* */ }
   navigate(start);
+  // Trainingen uit Intervals.icu bijwerken (stil, hooguit om de 3 uur)
+  icuAutoSync().then((changed) => { if (changed) RENDER[currentView]?.(); });
 }
 
 init();
