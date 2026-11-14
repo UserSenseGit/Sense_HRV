@@ -2,6 +2,9 @@
 
 import { $, esc, notify, longDate, sleepHours, fmtHours } from './util.js';
 import { getDay, putDay } from './db.js';
+import { activitiesOn } from './intervals.js';
+import { typeFromHr } from './training.js';
+import { addDays } from './util.js';
 
 export const SPORTS = ['Fietsen', 'Lopen', 'Wandelen', 'Crosstrainer', 'Zwemmen', 'Kracht', 'Skiën', 'Anders'];
 export const TRAINING = [['rest', 'Rust'], ['easy', 'Licht'], ['average', 'Gemiddeld'], ['intense', 'Intensief']];
@@ -27,6 +30,7 @@ export function setCustomTagNames(list) {
 }
 
 let current = null; // record dat bewerkt wordt
+let shown = {}; // getoonde tags (incl. vooraf ingevulde training)
 
 function slider(key, val) {
   const s = SLIDERS[key];
@@ -57,7 +61,25 @@ export async function openTags(date, done = null) {
   const rec = (await getDay(date)) || { date, tags: {} };
   rec.tags = rec.tags || {};
   current = rec;
-  const t = rec.tags;
+  const t = { ...rec.tags };
+  // Training van gisteren vooraf invullen uit Intervals.icu (pas bewaard na 'Bewaar')
+  let prefilled = false;
+  if (!t.training) {
+    const acts = await activitiesOn(addDays(date, -1));
+    if (acts.length) {
+      const main = [...acts].sort((a, b) => b.movingMin - a.movingMin)[0];
+      const mins = acts.reduce((a, x) => a + (x.movingMin || 0), 0);
+      const hrMins = acts.filter((x) => x.avgHr).reduce((a, x) => a + x.movingMin, 0);
+      t.avgHr = hrMins ? Math.round(acts.filter((x) => x.avgHr).reduce((a, x) => a + x.avgHr * x.movingMin, 0) / hrMins) : null;
+      t.training = typeFromHr(t.avgHr);
+      t.sport = main.sport;
+      t.durationMin = mins;
+      t.distanceKm = Math.round(acts.reduce((a, x) => a + (x.distanceKm || 0), 0) * 10) / 10 || null;
+      if (main.rpe != null) t.rpe = main.rpe;
+      prefilled = true;
+    }
+  }
+  shown = t;
   const custom = customTagNames();
   for (const k of Object.keys(t.custom || {})) if (!custom.includes(k)) custom.push(k);
   const sheet = $('sheet');
@@ -92,6 +114,7 @@ export async function openTags(date, done = null) {
     </div>
 
     <div class="section-label">Training (gisteren)</div>
+    ${prefilled ? '<p class="small" style="margin: 0 4px; color: var(--ok);">Vooraf ingevuld uit Intervals.icu. Controleer en pas aan waar nodig.</p>' : ''}
     ${segmented('training', TRAINING, t.training, 'Hoe was je training gisteren?')}
     <div id="trainingDetails" class="stack" ${!t.training || t.training === 'rest' ? 'hidden' : ''}>
       <div class="field">
@@ -107,6 +130,7 @@ export async function openTags(date, done = null) {
           <div><label class="lbl" for="tag-dur">Duur (min)</label><input type="number" id="tag-dur" class="input" inputmode="numeric" min="0" value="${t.durationMin ?? ''}"></div>
           <div><label class="lbl" for="tag-dist">Afstand (km)</label><input type="number" id="tag-dist" class="input" inputmode="decimal" min="0" step="0.1" value="${t.distanceKm ?? ''}"></div>
         </div>
+        <div><label class="lbl" for="tag-avghr">Gemiddelde hartslag (bpm, voor TRIMP)</label><input type="number" id="tag-avghr" class="input" inputmode="numeric" min="30" max="230" value="${t.avgHr ?? ''}"></div>
       </div>
       ${slider('performance', t.performance)}
     </div>
@@ -190,7 +214,7 @@ async function saveTags() {
   for (const key of Object.keys(SLIDERS)) {
     const el = $(`tag-${key}`);
     // Niet aangeraakt: exacte waarde behouden (ook decimalen uit een import). Gewist: leeg.
-    if (!el || !el.dataset.touched) t[key] = rec.tags[key] ?? null;
+    if (!el || !el.dataset.touched) t[key] = shown[key] ?? null;
     else t[key] = el.dataset.empty ? null : Number(el.value);
   }
   t.bedTime = $('tag-bed').value || null;
@@ -201,8 +225,9 @@ async function saveTags() {
     t.sport = $('tag-sport').value;
     t.durationMin = numOrNull($('tag-dur').value);
     t.distanceKm = numOrNull($('tag-dist').value);
+    t.avgHr = numOrNull($('tag-avghr').value);
   } else {
-    t.sport = null; t.durationMin = null; t.distanceKm = null; t.rpe = null; t.performance = null;
+    t.sport = null; t.durationMin = null; t.distanceKm = null; t.rpe = null; t.performance = null; t.avgHr = null;
   }
   t.alcohol = segVal('alcohol');
   const sick = segVal('sick'); t.sick = sick == null ? null : sick === 'yes';

@@ -11,8 +11,9 @@
 // }
 
 const DB_NAME = 'sense-hrv';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'days';
+const ACT = 'activities'; // trainingen uit Intervals.icu, sleutel = activiteit-id
 
 let dbPromise;
 function open() {
@@ -22,6 +23,7 @@ function open() {
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'date' });
+        if (!db.objectStoreNames.contains(ACT)) db.createObjectStore(ACT, { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -30,10 +32,10 @@ function open() {
   return dbPromise;
 }
 
-function tx(mode, fn) {
+function tx(mode, fn, storeName = STORE) {
   return open().then((db) => new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const store = t.objectStore(STORE);
+    const t = db.transaction(storeName, mode);
+    const store = t.objectStore(storeName);
     let result;
     Promise.resolve(fn(store)).then((r) => { result = r; });
     t.oncomplete = () => resolve(result);
@@ -83,3 +85,11 @@ export async function requestPersist() {
 export async function isPersisted() {
   try { return navigator.storage?.persisted ? await navigator.storage.persisted() : false; } catch { return false; }
 }
+
+// ---- Activiteiten (Intervals.icu) ----
+// { id, date: 'YYYY-MM-DD', start, name, type, sport, movingMin, distanceKm, avgHr, maxHr, rpe, load, source: 'intervals' }
+export const getActivities = () => tx('readonly', (s) => wrap(s.getAll()), ACT).then((rows) => rows.sort((a, b) => (a.start || a.date).localeCompare(b.start || b.date)));
+export function putActivities(rows) {
+  return tx('readwrite', (s) => { for (const r of rows) s.put(r); return rows.length; }, ACT);
+}
+export const clearActivities = () => tx('readwrite', (s) => wrap(s.clear()), ACT);

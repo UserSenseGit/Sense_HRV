@@ -1,6 +1,6 @@
 // Import van de HRV4Training-export (CSV) en back-up/export van eigen data.
 
-import { getAll, putMany } from './db.js';
+import { getAll, putMany, getActivities, putActivities } from './db.js';
 import { isoDate, download } from './util.js';
 
 const num = (v) => {
@@ -66,6 +66,7 @@ export function parseHrv4Training(text) {
     const training = TRAINING[str(g('training'))] || null;
     const dist = num(g('trainingDistance'));
     const time = num(g('trainingTime'));
+    const avgHr = num(g('bike_hr')) ?? num(g('run_hr')) ?? num(g('swim_hr'));
     const sportRaw = str(g('training_type'));
     const sick = str(g('sickness'));
     const trav = str(g('traveling'));
@@ -82,6 +83,7 @@ export function parseHrv4Training(text) {
       rpe: num(g('trainingRPE')),
       durationMin: time != null ? Math.round(time / 60) : null,
       distanceKm: dist != null ? r1(dist / 1000) : null,
+      avgHr: training && training !== 'rest' && avgHr != null ? Math.round(avgHr) : null,
       performance: num(g('training_performance')),
       motivation: num(g('trainingMotivation')),
       mentalEnergy: num(g('mental_energy')),
@@ -143,7 +145,8 @@ export async function importRecords(incoming) {
 // ---- Back-up (JSON) ----
 export async function exportBackup() {
   const rows = await getAll();
-  const payload = { app: 'sense-hrv', version: 1, exportedAt: new Date().toISOString(), days: rows };
+  const activities = await getActivities();
+  const payload = { app: 'sense-hrv', version: 2, exportedAt: new Date().toISOString(), days: rows, activities };
   download(`sense-hrv-backup-${isoDate()}.json`, JSON.stringify(payload));
   return rows.length;
 }
@@ -151,12 +154,15 @@ export async function exportBackup() {
 export function parseBackup(text) {
   const obj = JSON.parse(text);
   if (obj?.app !== 'sense-hrv' || !Array.isArray(obj.days)) throw new Error('Geen Sense HRV-back-up');
-  return obj.days.filter((d) => typeof d?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+  const days = obj.days.filter((d) => typeof d?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+  days.activities = Array.isArray(obj.activities) ? obj.activities.filter((a) => a?.id != null && typeof a.date === 'string') : [];
+  return days;
 }
 
 /** Back-up terugzetten: records uit het bestand vervangen dezelfde dagen. */
 export async function restoreBackup(days) {
   await putMany(days);
+  if (days.activities?.length) await putActivities(days.activities);
   return days.length;
 }
 
