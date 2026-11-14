@@ -7,6 +7,8 @@ import { openTags, TRAINING, ALCOHOL, customTagNames, setCustomTagNames } from '
 import { loadMeasurement } from './measure.js';
 import { loadSeries, lastMeasuredIndex, valueColor, adviceCard, renderWeek } from './trends.js';
 import { advice, readinessAdvice, baselineArrow, CATEGORY_LABEL } from './analytics.js';
+import { loadZoneContext, zonesTodayHtml, weekTargetsHtml } from './zoneview.js';
+import { weekStart } from './zones.js';
 import { parseHrv4Training, importRecords, exportBackup, parseBackup, restoreBackup, exportCsv } from './importexport.js';
 
 const go = (view) => window.dispatchEvent(new CustomEvent('sense:navigate', { detail: view }));
@@ -77,6 +79,7 @@ export async function renderToday() {
       <div class="num" style="font-size: 28px;">${fmt(d.hr)} <span class="unit">bpm</span></div>
       ${miniBand(d.hr, d.hrLo, d.hrHi)}</div>
     ${adviceCard(adv, isToday ? 'Advies vandaag' : `Advies ${niceDate(d.date)}`)}
+    <div id="todayZones" class="stack"></div>
     <button class="card readiness-mini" data-go="trends" style="width: 100%; text-align: left; border: 0; color: inherit;">
       <div class="between"><span class="small muted">Readiness-score</span><span class="small muted">Trends ›</span></div>
       <div class="row" style="gap: 10px; align-items: baseline;"><span class="num accent-text" style="font-size: 28px;">${fmt(d.readiness)}</span>
@@ -99,6 +102,9 @@ export async function renderToday() {
     ${!isToday ? '<button class="btn btn-primary btn-block" data-go="meten">Meting van vandaag starten</button>' : ''}`;
   bindGo(el);
   $('todayTags').onclick = () => openTags(d.date);
+  const { ctx, hasActivities } = await loadZoneContext();
+  const box = $('todayZones');
+  if (box) box.innerHTML = zonesTodayHtml(ctx, today) + weekTargetsHtml(ctx, weekStart(today), { hasActivities });
 }
 
 function tagSummary(t, extra) {
