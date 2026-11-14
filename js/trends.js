@@ -218,7 +218,7 @@ function renderReadiness(days, li, period) {
 }
 
 // ---------------- Weekoverzicht (Historiek) ----------------
-export async function renderWeek(container, offset) {
+export async function renderWeek(container, offset, onPickDay = null) {
   const { days, byDate } = await loadSeries();
   const endDate = addDays(isoDate(), -7 * offset);
   const dates = [];
@@ -240,7 +240,7 @@ export async function renderWeek(container, offset) {
     </div>
     <div class="chart-wrap" style="height: 170px;"><canvas id="chWeek" role="img" aria-label="rMSSD deze week"></canvas></div>
     <div class="wk-grid">
-      <span></span>${dates.map((dt) => `<span class="small muted wk-h">${dt === today ? 'vdg' : `${dt.slice(8, 10)}/${dt.slice(5, 7)}`}</span>`).join('')}
+      <span></span>${dates.map((dt) => `<button type="button" class="wk-h wk-day" data-day="${dt}" aria-label="${esc(niceDate(dt))} openen">${dt === today ? 'vdg' : `${dt.slice(8, 10)}/${dt.slice(5, 7)}`}</button>`).join('')}
       <span class="small muted">Training</span>${w.map((d) => { const t = d.rec?.tags || {}; return `<span class="wk-t">${t.training && t.training !== 'rest' ? `${esc(TR[t.training] || '')}${t.durationMin ? `<br>${t.durationMin}′` : ''}` : t.training === 'rest' ? '<span class="muted">rust</span>' : ''}</span>`; }).join('')}
       <span class="small muted">Slaap</span>${w.map((d) => cell(d, 'sleepQuality')).join('')}
       <span class="small muted">Spierpijn</span>${w.map((d) => cell(d, 'soreness')).join('')}
@@ -280,6 +280,13 @@ export async function renderWeek(container, offset) {
   });
   container._chart?.destroy();
   container._chart = ch;
-  $('wkPrev').onclick = () => renderWeek(container, offset + 1);
-  $('wkNext').onclick = () => { if (offset > 0) renderWeek(container, offset - 1); };
+  $('wkPrev').onclick = () => renderWeek(container, offset + 1, onPickDay);
+  $('wkNext').onclick = () => { if (offset > 0) renderWeek(container, offset - 1, onPickDay); };
+  // Op een dag tikken (datum of punt in de grafiek) opent die dag
+  const pickDay = (dt) => { if (onPickDay && byDate.get(dt)?.rec) onPickDay(dt); else if (onPickDay) notify('Geen gegevens', niceDate(dt)); };
+  container.querySelectorAll('button[data-day]').forEach((b) => { b.onclick = () => pickDay(b.dataset.day); });
+  ch.options.onClick = (e) => {
+    const pts = ch.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+    if (pts.length) pickDay(dates[pts[0].index]);
+  };
 }

@@ -32,7 +32,9 @@ function slider(key, val) {
   const s = SLIDERS[key];
   const has = val != null && val !== '';
   return `<div class="field">
-    <div class="field-head"><label class="q" for="tag-${key}">${s.q}</label><span class="badge" id="badge-${key}">${has ? `${val}/10` : '–'}</span></div>
+    <div class="field-head"><label class="q" for="tag-${key}">${s.q}</label>
+      <span class="row" style="gap: 6px;"><button type="button" class="btn btn-sm btn-ghost clear-btn" data-clear="${key}" aria-label="Wissen" ${has ? '' : 'hidden'}>Wis</button>
+      <span class="badge" id="badge-${key}">${has ? `${val}/10` : '–'}</span></span></div>
     <input type="range" class="range" id="tag-${key}" data-slider="${key}" min="0" max="10" step="1" value="${has ? Math.round(val) : 5}" ${has ? '' : 'data-empty="1" style="opacity:.5"'}>
     <div class="range-ends"><span>${s.lo}</span><span>${s.hi}</span></div>
   </div>`;
@@ -47,7 +49,11 @@ function segmented(key, options, val, label) {
   </div>`;
 }
 
-export async function openTags(date) {
+let onDone = null; // waarheen na bewaren of sluiten
+
+/** Opent het tags-formulier. `done` wordt na bewaren/sluiten aangeroepen (standaard: naar Vandaag). */
+export async function openTags(date, done = null) {
+  onDone = done;
   const rec = (await getDay(date)) || { date, tags: {} };
   rec.tags = rec.tags || {};
   current = rec;
@@ -134,15 +140,25 @@ export async function openTags(date) {
     const el = e.target;
     if (el.dataset.slider) {
       el.removeAttribute('data-empty');
+      el.dataset.touched = '1';
       el.style.opacity = '';
       $(`badge-${el.dataset.slider}`).textContent = `${el.value}/10`;
+      sheet.querySelector(`button[data-clear="${el.dataset.slider}"]`).hidden = false;
     }
     if (el.id === 'tag-bed' || el.id === 'tag-wake') $('tag-hours').textContent = fmtHours(sleepHours($('tag-bed').value, $('tag-wake').value));
   };
   sheet.onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.seg) {
+    if (b.dataset.clear) {
+      const el = $(`tag-${b.dataset.clear}`);
+      el.dataset.empty = '1';
+      el.dataset.touched = '1';
+      el.value = 5;
+      el.style.opacity = '.5';
+      $(`badge-${b.dataset.clear}`).textContent = '–';
+      b.hidden = true;
+    } else if (b.dataset.seg) {
       const group = sheet.querySelectorAll(`button[data-seg="${b.dataset.seg}"]`);
       const wasOn = b.getAttribute('aria-pressed') === 'true';
       group.forEach((g) => g.setAttribute('aria-pressed', 'false'));
@@ -154,7 +170,9 @@ export async function openTags(date) {
     } else if (b.id === 'tagsSave' || b.id === 'tagsSave2') {
       saveTags();
     } else if (b.id === 'tagsClose') {
+      const done = onDone;
       closeTags();
+      if (done) done();
     }
   };
 }
@@ -171,7 +189,9 @@ async function saveTags() {
   const t = {};
   for (const key of Object.keys(SLIDERS)) {
     const el = $(`tag-${key}`);
-    t[key] = !el || el.dataset.empty ? (rec.tags[key] ?? null) : Number(el.value);
+    // Niet aangeraakt: exacte waarde behouden (ook decimalen uit een import). Gewist: leeg.
+    if (!el || !el.dataset.touched) t[key] = rec.tags[key] ?? null;
+    else t[key] = el.dataset.empty ? null : Number(el.value);
   }
   t.bedTime = $('tag-bed').value || null;
   t.wakeTime = $('tag-wake').value || null;
@@ -197,9 +217,11 @@ async function saveTags() {
   rec.extrasystolen = numOrNull($('tag-extra').value);
   await putDay(rec);
   notify('Tags bewaard', longDate(rec.date));
+  const done = onDone;
   closeTags();
   window.dispatchEvent(new CustomEvent('sense:data'));
-  window.dispatchEvent(new CustomEvent('sense:navigate', { detail: 'vandaag' }));
+  if (done) done();
+  else window.dispatchEvent(new CustomEvent('sense:navigate', { detail: 'vandaag' }));
 }
 
 export function closeTags() {
@@ -208,4 +230,5 @@ export function closeTags() {
   sheet.innerHTML = '';
   document.body.style.overflow = '';
   current = null;
+  onDone = null;
 }

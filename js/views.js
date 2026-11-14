@@ -143,7 +143,7 @@ export async function renderHistory() {
     el.innerHTML = `<h2 class="view-title">Historiek</h2>${toggle}<div class="card" id="histWeek"></div>`;
     el.onclick = null;
     bindToggle();
-    await renderWeek($('histWeek'), 0);
+    await renderWeek($('histWeek'), 0, openDay);
     return;
   }
   const shown = rows.slice(0, histShown);
@@ -176,7 +176,7 @@ export async function renderHistory() {
   if (more) more.onclick = (e) => { e.stopPropagation(); histShown += PAGE * 3; renderHistory(); };
 }
 
-async function openDay(date) {
+export async function openDay(date) {
   const r = await getDay(date);
   if (!r) return;
   const t = r.tags || {};
@@ -215,7 +215,7 @@ async function openDay(date) {
   sheet.onclick = null;
   sheet.oninput = null;
   $('dayClose').onclick = close;
-  $('dayTags').onclick = () => openTags(date);
+  $('dayTags').onclick = () => openTags(date, () => openDay(date));
   if (r.measurement) $('dayReanalyse').onclick = () => { close(); go('meten'); loadMeasurement(r); notify('Meting geopend', 'Pas de segmenten aan en sla opnieuw op'); };
   $('dayDelete').onclick = async () => {
     if (!(await confirmDialog('Dag verwijderen?', `${longDate(date)} wordt definitief verwijderd.`, 'Verwijderen', true))) return;
