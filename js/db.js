@@ -25,11 +25,44 @@ function open() {
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'date' });
         if (!db.objectStoreNames.contains(ACT)) db.createObjectStore(ACT, { keyPath: 'id' });
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      // Een ander tabblad met een oudere versie houdt de database vast: melden in plaats van stil wachten.
+      req.onblocked = () => showDbBanner('Sluit de andere tabbladen of vensters van Sense HRV (of herstart de browser) om de update af te ronden. Je gegevens blijven bewaard.');
+      req.onsuccess = () => {
+        const db = req.result;
+        // Bij een latere update vanuit een ander tabblad: database loslaten en herladen, zodat de update niet blokkeert.
+        db.onversionchange = () => { db.close(); showDbBanner('Sense HRV is bijgewerkt in een ander tabblad. Herlaad deze pagina.', true); };
+        hideDbBanner();
+        resolve(db);
+      };
+      req.onerror = () => { showDbBanner(`De opslag kon niet geopend worden: ${req.error?.message || 'onbekende fout'}`); reject(req.error); };
     });
   }
   return dbPromise;
+}
+
+function showDbBanner(text, reload = false) {
+  let el = document.getElementById('dbBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dbBanner';
+    el.setAttribute('role', 'alert');
+    el.className = 'db-banner';
+    document.body.prepend(el);
+  }
+  el.innerHTML = '';
+  const p = document.createElement('p');
+  p.textContent = text;
+  el.appendChild(p);
+  const b = document.createElement('button');
+  b.className = 'btn btn-sm btn-primary';
+  b.textContent = 'Herladen';
+  b.onclick = () => location.reload();
+  el.appendChild(b);
+  el.hidden = false;
+}
+function hideDbBanner() {
+  const el = document.getElementById('dbBanner');
+  if (el) el.hidden = true;
 }
 
 function tx(mode, fn, storeName = STORE) {
