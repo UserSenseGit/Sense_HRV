@@ -71,13 +71,10 @@ export async function renderToday() {
       </div>
     </div>
     ${bandHtml}
-    <div class="grid-2">
-      <div class="card"><div class="small muted">Hartslag</div><div class="num" style="font-size: 28px;">${fmt(d.hr)} <span class="unit">bpm</span></div>
-        ${miniBand(d.hr, d.hrLo, d.hrHi)}
-        <div class="small muted">${d.hrLo != null ? `band ${fmt(d.hrLo)}–${fmt(d.hrHi)} · bl ${fmt(d.hrBaseline)} ${baselineArrow(days, li, 'hrBaseline', 'hrSd60')}` : '&nbsp;'}</div></div>
-      <div class="card"><div class="small muted">Extrasystolen</div><div class="num alert-text" style="font-size: 28px;">${fmt(last.extrasystolen)}</div>
-        <div class="small muted">${last.measurement ? 'uitgefilterd' : last.source === 'hrv4t' ? 'uit HRV4Training' : '&nbsp;'}</div></div>
-    </div>
+    <div class="card"><div class="between"><span class="small muted">Hartslag</span>
+        <span class="small muted">${d.hrLo != null ? `band ${fmt(d.hrLo)}–${fmt(d.hrHi)} · bl ${fmt(d.hrBaseline)} ${baselineArrow(days, li, 'hrBaseline', 'hrSd60')}` : ''}</span></div>
+      <div class="num" style="font-size: 28px;">${fmt(d.hr)} <span class="unit">bpm</span></div>
+      ${miniBand(d.hr, d.hrLo, d.hrHi)}</div>
     ${adviceCard(adv, isToday ? 'Advies vandaag' : `Advies ${niceDate(d.date)}`)}
     <button class="card readiness-mini" data-go="trends" style="width: 100%; text-align: left; border: 0; color: inherit;">
       <div class="between"><span class="small muted">Readiness-score</span><span class="small muted">Trends ›</span></div>
@@ -96,14 +93,14 @@ export async function renderToday() {
     <div class="card">
       <div class="between"><span class="card-title" style="margin: 0;">Tags ${isToday ? 'vandaag' : esc(niceDate(d.date))}</span>
         <button class="btn btn-sm" id="todayTags">${filled ? 'Bewerken' : 'Invullen'}</button></div>
-      ${tagSummary(t)}
+      ${tagSummary(t, last.extrasystolen)}
     </div>
     ${!isToday ? '<button class="btn btn-primary btn-block" data-go="meten">Meting van vandaag starten</button>' : ''}`;
   bindGo(el);
   $('todayTags').onclick = () => openTags(d.date);
 }
 
-function tagSummary(t) {
+function tagSummary(t, extra) {
   const items = [];
   if (t.sleepQuality != null) items.push(['Slaap', `${t.sleepQuality}/10${t.sleepHours != null ? ` · ${fmtHours(t.sleepHours)} u` : ''}`]);
   if (t.training) items.push(['Training', `${TRAINING.find(([v]) => v === t.training)?.[1] ?? t.training}${t.sport ? ` · ${t.sport}` : ''}${t.durationMin ? ` · ${t.durationMin} min` : ''}`]);
@@ -113,6 +110,7 @@ function tagSummary(t) {
   if (t.fatigue != null) items.push(['Vermoeidheid', `${t.fatigue}/10`]);
   if (t.alcohol && t.alcohol !== 'nothing') items.push(['Alcohol', ALCOHOL.find(([v]) => v === t.alcohol)?.[1] ?? t.alcohol]);
   if (t.sick) items.push(['Ziek', 'ja']);
+  if (extra != null) items.push(['Extrasystolen', extra]);
   for (const [k, v] of Object.entries(t.custom || {})) items.push([k, v]);
   if (!items.length) return '<p class="small muted" style="margin: 10px 0 0;">Nog niet ingevuld.</p>';
   return `<dl class="kv" style="margin: 12px 0 0;">${items.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
@@ -145,7 +143,7 @@ export async function renderHistory() {
     el.innerHTML = `<h2 class="view-title">Historiek</h2>${toggle}<div class="card" id="histWeek"></div>`;
     el.onclick = null;
     bindToggle();
-    await renderWeek($('histWeek'), 0);
+    await renderWeek($('histWeek'), 0, openDay);
     return;
   }
   const shown = rows.slice(0, histShown);
@@ -178,7 +176,7 @@ export async function renderHistory() {
   if (more) more.onclick = (e) => { e.stopPropagation(); histShown += PAGE * 3; renderHistory(); };
 }
 
-async function openDay(date) {
+export async function openDay(date) {
   const r = await getDay(date);
   if (!r) return;
   const t = r.tags || {};
@@ -217,7 +215,7 @@ async function openDay(date) {
   sheet.onclick = null;
   sheet.oninput = null;
   $('dayClose').onclick = close;
-  $('dayTags').onclick = () => openTags(date);
+  $('dayTags').onclick = () => openTags(date, () => openDay(date));
   if (r.measurement) $('dayReanalyse').onclick = () => { close(); go('meten'); loadMeasurement(r); notify('Meting geopend', 'Pas de segmenten aan en sla opnieuw op'); };
   $('dayDelete').onclick = async () => {
     if (!(await confirmDialog('Dag verwijderen?', `${longDate(date)} wordt definitief verwijderd.`, 'Verwijderen', true))) return;

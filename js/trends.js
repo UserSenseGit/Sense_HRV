@@ -4,7 +4,7 @@ import { $, esc, notify, niceDate, longDate, addDays, isoDate } from './util.js'
 import { getAll } from './db.js';
 import {
   buildSeries, trendAt, TREND_INFO, DIR_LABEL, DIR_ARROW, heatClass, HEAT_COLORS, PARAMS, DEFAULT_READINESS,
-  readinessSeries, readinessAdvice, weekVsMonth, CATEGORY_LABEL,
+  readinessSeries, readinessAdvice, weekVsMonth, radarPoint, CATEGORY_LABEL,
 } from './analytics.js';
 import { bandBarChart, bandLineChart, radarChart, sparkline, destroyAll, CHART_COLORS as C } from './charts.js';
 
@@ -157,7 +157,8 @@ function renderReadiness(days, li, period) {
   const a = readinessAdvice(d);
   const axes = params.map((k) => {
     const ch = weekVsMonth(days, li, k);
-    return { key: k, label: PARAMS[k].short || PARAMS[k].label, change: ch, cur: ch == null ? 100 : 100 + Math.max(-40, Math.min(40, ch * PARAMS[k].better)), prev: 100 };
+    const pt = radarPoint(days, li, k);
+    return { key: k, label: PARAMS[k].short || PARAMS[k].label, change: ch, cur: pt?.cur ?? 50, prev: pt?.prev ?? 50 };
   });
   const span = Math.min(period, 90);
   const end = days.length - 1;
@@ -186,7 +187,7 @@ function renderReadiness(days, li, period) {
       <div class="chart-wrap" style="height: 260px;"><canvas id="chRadar" role="img" aria-label="Radar: laatste 7 dagen tegenover de 30 dagen daarvoor"></canvas></div>
       ${legend([[C.accent, 'laatste 7 dagen'], [C.muted, 'vorige 30 dagen']])}
       <dl class="kv" style="margin: 10px 0 0;">${axes.map((x) => `<dt>${esc(PARAMS[x.key].label)}</dt><dd style="color: ${x.change == null ? 'inherit' : x.change * PARAMS[x.key].better >= 0 ? 'var(--ok)' : 'var(--alert)'}">${pct(x.change)}</dd>`).join('')}</dl>
-      <p class="small muted" style="margin: 8px 0 0;">Naar buiten in de radar = beter. Bij HR, spierpijn, vermoeidheid en extrasystolen is een daling dus beter.</p>
+      <p class="small muted" style="margin: 8px 0 0;">Elke as loopt van je slechtste (midden) tot je beste dagwaarde (buiten) van de laatste 90 dagen. Bij HR, spierpijn, vermoeidheid en extrasystolen is lager dus beter en ligt dat buiten.</p>
     </div>
 
     <div class="card">
@@ -217,7 +218,7 @@ function renderReadiness(days, li, period) {
 }
 
 // ---------------- Weekoverzicht (Historiek) ----------------
-export async function renderWeek(container, offset) {
+export async function renderWeek(container, offset, onPickDay = null) {
   const { days, byDate } = await loadSeries();
   const endDate = addDays(isoDate(), -7 * offset);
   const dates = [];
@@ -239,7 +240,7 @@ export async function renderWeek(container, offset) {
     </div>
     <div class="chart-wrap" style="height: 170px;"><canvas id="chWeek" role="img" aria-label="rMSSD deze week"></canvas></div>
     <div class="wk-grid">
-      <span></span>${dates.map((dt) => `<span class="small muted wk-h">${dt === today ? 'vdg' : `${dt.slice(8, 10)}/${dt.slice(5, 7)}`}</span>`).join('')}
+      <span></span>${dates.map((dt) => `<button type="button" class="wk-h wk-day" data-day="${dt}" aria-label="${esc(niceDate(dt))} openen">${dt === today ? 'vdg' : `${dt.slice(8, 10)}/${dt.slice(5, 7)}`}</button>`).join('')}
       <span class="small muted">Training</span>${w.map((d) => { const t = d.rec?.tags || {}; return `<span class="wk-t">${t.training && t.training !== 'rest' ? `${esc(TR[t.training] || '')}${t.durationMin ? `<br>${t.durationMin}′` : ''}` : t.training === 'rest' ? '<span class="muted">rust</span>' : ''}</span>`; }).join('')}
       <span class="small muted">Slaap</span>${w.map((d) => cell(d, 'sleepQuality')).join('')}
       <span class="small muted">Spierpijn</span>${w.map((d) => cell(d, 'soreness')).join('')}
@@ -279,6 +280,13 @@ export async function renderWeek(container, offset) {
   });
   container._chart?.destroy();
   container._chart = ch;
-  $('wkPrev').onclick = () => renderWeek(container, offset + 1);
-  $('wkNext').onclick = () => { if (offset > 0) renderWeek(container, offset - 1); };
+  $('wkPrev').onclick = () => renderWeek(container, offset + 1, onPickDay);
+  $('wkNext').onclick = () => { if (offset > 0) renderWeek(container, offset - 1, onPickDay); };
+  // Op een dag tikken (datum of punt in de grafiek) opent die dag
+  const pickDay = (dt) => { if (onPickDay && byDate.get(dt)?.rec) onPickDay(dt); else if (onPickDay) notify('Geen gegevens', niceDate(dt)); };
+  container.querySelectorAll('button[data-day]').forEach((b) => { b.onclick = () => pickDay(b.dataset.day); });
+  ch.options.onClick = (e) => {
+    const pts = ch.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+    if (pts.length) pickDay(dates[pts[0].index]);
+  };
 }

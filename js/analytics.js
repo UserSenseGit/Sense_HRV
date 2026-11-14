@@ -255,4 +255,23 @@ export function weekVsMonth(days, i, key) {
   return ((mean(cur) - mp) / Math.abs(mp)) * 100;
 }
 
+/**
+ * Radarpunten: gemiddelde van de laatste 7 dagen en van de 30 dagen daarvoor, elk geplaatst
+ * op een schaal 0–100 tussen de laagste en hoogste dagwaarde van de laatste 90 dagen.
+ * 'Naar buiten' is altijd beter (bij HR, spierpijn, ... is de schaal omgekeerd).
+ */
+export function radarPoint(days, i, key) {
+  const val = (x) => (x.rec ? PARAMS[key].get(x.rec) : null);
+  const cur = nums(days.slice(Math.max(0, i - 6), i + 1).map(val));
+  const prev = nums(days.slice(Math.max(0, i - 36), Math.max(0, i - 6)).map(val));
+  const range = nums(days.slice(Math.max(0, i - 89), i + 1).map(val));
+  if (!cur.length || prev.length < 5 || range.length < 2) return null;
+  const lo = Math.min(...range), hi = Math.max(...range);
+  const scale = (v) => {
+    const f = hi === lo ? 0.5 : (v - lo) / (hi - lo);
+    return 10 + 90 * (PARAMS[key].better > 0 ? f : 1 - f);
+  };
+  return { cur: scale(mean(cur)), prev: scale(mean(prev)) };
+}
+
 export { mean, sd };

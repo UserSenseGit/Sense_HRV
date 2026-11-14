@@ -246,3 +246,6 @@ label.lbl { display: block; font-size: 12px; color: var(--muted); margin-bottom:
 .mini-band .rng { position: absolute; top: 0; bottom: 0; background: var(--band); border-radius: 999px; }
 .mini-band .dot { position: absolute; top: -4px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--text); border: 2px solid var(--card); }
 .view-toggle { margin: 6px 0 10px; }
+.wk-day { background: var(--card-2); border: 0; border-radius: 8px; min-height: 32px; color: var(--muted); font-size: 10px; padding: 0; }
+.wk-day:active { background: var(--line); }
+.clear-btn { min-height: 32px; padding: 4px 10px; font-size: 12px; color: var(--muted); }
