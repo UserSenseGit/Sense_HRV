@@ -4,7 +4,7 @@ import { $, esc, notify, niceDate, longDate, addDays, isoDate } from './util.js'
 import { getAll } from './db.js';
 import {
   buildSeries, trendAt, TREND_INFO, DIR_LABEL, DIR_ARROW, heatClass, HEAT_COLORS, PARAMS, DEFAULT_READINESS,
-  readinessSeries, readinessAdvice, weekVsMonth, CATEGORY_LABEL,
+  readinessSeries, readinessAdvice, weekVsMonth, radarPoint, CATEGORY_LABEL,
 } from './analytics.js';
 import { bandBarChart, bandLineChart, radarChart, sparkline, destroyAll, CHART_COLORS as C } from './charts.js';
 
@@ -157,7 +157,8 @@ function renderReadiness(days, li, period) {
   const a = readinessAdvice(d);
   const axes = params.map((k) => {
     const ch = weekVsMonth(days, li, k);
-    return { key: k, label: PARAMS[k].short || PARAMS[k].label, change: ch, cur: ch == null ? 100 : 100 + Math.max(-40, Math.min(40, ch * PARAMS[k].better)), prev: 100 };
+    const pt = radarPoint(days, li, k);
+    return { key: k, label: PARAMS[k].short || PARAMS[k].label, change: ch, cur: pt?.cur ?? 50, prev: pt?.prev ?? 50 };
   });
   const span = Math.min(period, 90);
   const end = days.length - 1;
@@ -186,7 +187,7 @@ function renderReadiness(days, li, period) {
       <div class="chart-wrap" style="height: 260px;"><canvas id="chRadar" role="img" aria-label="Radar: laatste 7 dagen tegenover de 30 dagen daarvoor"></canvas></div>
       ${legend([[C.accent, 'laatste 7 dagen'], [C.muted, 'vorige 30 dagen']])}
       <dl class="kv" style="margin: 10px 0 0;">${axes.map((x) => `<dt>${esc(PARAMS[x.key].label)}</dt><dd style="color: ${x.change == null ? 'inherit' : x.change * PARAMS[x.key].better >= 0 ? 'var(--ok)' : 'var(--alert)'}">${pct(x.change)}</dd>`).join('')}</dl>
-      <p class="small muted" style="margin: 8px 0 0;">Naar buiten in de radar = beter. Bij HR, spierpijn, vermoeidheid en extrasystolen is een daling dus beter.</p>
+      <p class="small muted" style="margin: 8px 0 0;">Elke as loopt van je slechtste (midden) tot je beste dagwaarde (buiten) van de laatste 90 dagen. Bij HR, spierpijn, vermoeidheid en extrasystolen is lager dus beter en ligt dat buiten.</p>
     </div>
 
     <div class="card">

@@ -146,7 +146,7 @@ export function radarChart(canvas, axes) {
       plugins: { legend: { display: false }, tooltip: { enabled: false } },
       scales: {
         r: {
-          suggestedMin: 60, suggestedMax: 130, angleLines: { color: C.line }, grid: { color: C.line },
+          min: 0, max: 100, angleLines: { color: C.line }, grid: { color: C.line },
           ticks: { display: false }, pointLabels: { color: C.text, font: { size: 11 } },
         },
       },
