@@ -4,7 +4,7 @@ import { esc, isoDate, addDays } from './util.js';
 import { getAll, getActivities } from './db.js';
 import {
   trainingSettings, setTrainingSetting, sessionsFrom, loadSeries, riskZone, RISK_INFO, summaries, intensity,
-  sportsOf, LOAD_METRICS, restingHr,
+  sportsOf, LOAD_METRICS, restingHr, loadOf,
 } from './training.js';
 import { mountChart, CHART_COLORS as C } from './charts.js';
 
@@ -116,6 +116,13 @@ export async function renderTraining(el, toggle) {
     </div>
 
     <div class="card">
+      <div class="between"><h3 class="card-title" style="margin: 0;">Activiteiten</h3>
+        <span class="small muted" id="actPeriod"></span></div>
+      <p class="small muted" style="margin: 4px 0 10px;">Tik op een staaf hierboven om die ${sumMode === 'week' ? 'week' : 'maand'} te zien.</p>
+      <div id="actList"></div>
+    </div>
+
+    <div class="card">
       <h3 class="card-title">Intensiteit · laatste 4 weken</h3>
       <div class="row" style="gap: 16px; align-items: center;">
         <div style="width: 130px; height: 130px; flex-shrink: 0;"><canvas id="chInt" role="img" aria-label="Verdeling licht en zwaar"></canvas></div>
@@ -142,7 +149,7 @@ export async function renderTraining(el, toggle) {
   // Bediening
   el.querySelectorAll('button[data-metric]').forEach((b) => { b.onclick = () => { ss.set('sense.trMetric', b.dataset.metric); setTrainingSetting('metric', b.dataset.metric); renderTraining(el, toggle).then(() => rebind(el, toggle)); }; });
   el.querySelectorAll('button[data-range]').forEach((b) => { b.onclick = () => { ss.set('sense.trRange', Number(b.dataset.range)); renderTraining(el, toggle).then(() => rebind(el, toggle)); }; });
-  el.querySelector('#trSumMode').onchange = (e) => { ss.set('sense.trSumMode', e.target.value); renderTraining(el, toggle).then(() => rebind(el, toggle)); };
+  el.querySelector('#trSumMode').onchange = (e) => { ss.set('sense.trSumMode', e.target.value); ss.set('sense.trPick', null); renderTraining(el, toggle).then(() => rebind(el, toggle)); };
   el.querySelector('#trSport').onchange = (e) => { ss.set('sense.trSport', e.target.value); renderTraining(el, toggle).then(() => rebind(el, toggle)); };
   const saveNum = (id, key, min, max, allowEmpty) => {
     el.querySelector(id).onchange = (e) => {
@@ -180,7 +187,14 @@ export async function renderTraining(el, toggle) {
   mountChart(el.querySelector('#chSum'), {
     type: 'bar',
     data: { labels: sums.map((s) => s.label), datasets: [{ data: sums.map((s) => Math.round(s.total)), backgroundColor: sums.map((_, i) => (i === sums.length - 1 ? C.accent : C.band)), borderRadius: { topLeft: 2, topRight: 2 }, borderSkipped: 'bottom' }] },
-    options: axisOpts({ beginAtZero: true }),
+    options: { ...axisOpts({ beginAtZero: true }), onClick: (e, _els, chart) => {
+      const pts = chart.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+      if (!pts.length) return;
+      const p = sums[pts[0].index];
+      const pick = { start: p.start, end: p.end, label: sumMode === 'week' ? `week tot ${p.label}` : `maand ${p.label}` };
+      ss.set('sense.trPick', pick);
+      renderActivities(el, sessions, metric, sport, pick);
+    } },
     plugins: [{
       id: 'vals',
       afterDatasetsDraw(chart) {
@@ -191,11 +205,64 @@ export async function renderTraining(el, toggle) {
       },
     }],
   });
+  renderActivities(el, sessions, metric, sport, ss.get('sense.trPick', null));
   mountChart(el.querySelector('#chInt'), {
     type: 'doughnut',
     data: { labels: ['Licht', 'Zwaar'], datasets: [{ data: withHr ? [dist.low, dist.high] : [1], backgroundColor: withHr ? [C.olive, C.accent] : [C.line], borderWidth: 0 }] },
     options: { responsive: true, maintainAspectRatio: false, animation: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: false } } },
   });
+}
+
+const SRC = { intervals: 'Intervals', hrv4t: 'H4T', tags: 'Tags' };
+const TYPE = { easy: 'licht', average: 'gemiddeld', intense: 'intensief' };
+const hm = (min) => (min >= 60 ? `${Math.floor(min / 60)}u${String(Math.round(min % 60)).padStart(2, '0')}` : `${Math.round(min)} min`);
+
+/** Lijst met individuele activiteiten: laatste 30 dagen, of de gekozen week/maand. */
+function renderActivities(el, sessions, metric, sport, pick) {
+  const box = el.querySelector('#actList');
+  if (!box) return;
+  const today = isoDate();
+  const start = pick?.start || addDays(today, -29);
+  const end = pick?.end || today;
+  const list = sessions
+    .filter((s) => s.date >= start && s.date <= end && (sport === 'all' || s.sport === sport))
+    .sort((a, b) => (b.start || b.date).localeCompare(a.start || a.date));
+  el.querySelector('#actPeriod').innerHTML = pick
+    ? `${esc(pick.label)} · <button type="button" class="link-btn" id="actReset">laatste 30 d</button>`
+    : 'laatste 30 dagen';
+  const total = list.reduce((a, s) => a + (loadOf(s, metric) || 0), 0);
+  const unit = metric === 'trimp' ? 'TRIMP' : metric === 'srpe' ? 'sRPE' : LOAD_METRICS[metric].unit;
+  box.innerHTML = list.length ? `
+    <div class="small muted" style="margin-bottom: 8px;">${list.length} ${list.length === 1 ? 'activiteit' : 'activiteiten'} · ${hm(list.reduce((a, s) => a + s.durationMin, 0))} · ${fmt(list.reduce((a, s) => a + s.distanceKm, 0), 1)} km · ${fmt(total)} ${esc(unit)}</div>
+    ${list.map((s, i) => `
+      <button type="button" class="act-row" data-i="${i}" aria-expanded="false">
+        <span class="act-date"><b>${s.date.slice(8, 10)}/${s.date.slice(5, 7)}</b><span>${esc(s.start ? s.start.slice(11, 16) : '')}</span></span>
+        <span class="act-main"><span>${esc(s.name || s.sport)}</span>
+          <span class="small muted">${esc(s.name ? `${s.sport} · ` : '')}${hm(s.durationMin)}${s.distanceKm ? ` · ${fmt(s.distanceKm, 1)} km` : ''}${s.avgHr ? ` · ${Math.round(s.avgHr)} bpm` : ''}</span></span>
+        <span class="act-load"><span class="num">${fmt(loadOf(s, metric))}</span><span class="small muted">${metric === 'trimp' && s.trimpEstimated ? 'geschat' : esc(unit)}</span></span>
+      </button>
+      <div class="act-detail" id="actD${i}" hidden>
+        <dl class="kv" style="margin: 0;">
+          <dt>Bron</dt><dd>${SRC[s.source] || '–'}</dd>
+          <dt>Type</dt><dd>${TYPE[s.type] || '–'}</dd>
+          <dt>Duur</dt><dd>${hm(s.durationMin)}</dd>
+          <dt>Afstand</dt><dd>${s.distanceKm ? `${fmt(s.distanceKm, 1)} km` : '–'}</dd>
+          <dt>Gem. / max. hartslag</dt><dd>${s.avgHr ? Math.round(s.avgHr) : '–'} / ${s.maxHr ? Math.round(s.maxHr) : '–'} bpm</dd>
+          <dt>RPE</dt><dd>${fmt(s.rpe)}${s.rpeEstimated ? ' (geschat uit type)' : ''}</dd>
+          <dt>TRIMP</dt><dd>${fmt(s.trimp)}${s.trimpEstimated ? ' (geschat)' : ''}</dd>
+          <dt>Duur × RPE</dt><dd>${fmt(s.durationMin * s.rpe)}</dd>
+          ${s.icuLoad != null ? `<dt>Belasting Intervals.icu</dt><dd>${fmt(s.icuLoad)}</dd>` : ''}
+        </dl>
+      </div>`).join('')}` : '<p class="small muted" style="margin: 0;">Geen activiteiten in deze periode.</p>';
+  box.onclick = (e) => {
+    const row = e.target.closest('.act-row');
+    if (!row) return;
+    const d = box.querySelector(`#actD${row.dataset.i}`);
+    d.hidden = !d.hidden;
+    row.setAttribute('aria-expanded', String(!d.hidden));
+  };
+  const reset = el.querySelector('#actReset');
+  if (reset) reset.onclick = () => { ss.set('sense.trPick', null); renderActivities(el, sessions, metric, sport, null); };
 }
 
 // De HRV/Training-schakelaar zit in trends.js; na een herrender opnieuw koppelen.

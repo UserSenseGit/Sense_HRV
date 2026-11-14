@@ -249,3 +249,15 @@ label.lbl { display: block; font-size: 12px; color: var(--muted); margin-bottom:
 .wk-day { background: var(--card-2); border: 0; border-radius: 8px; min-height: 32px; color: var(--muted); font-size: 10px; padding: 0; }
 .wk-day:active { background: var(--line); }
 .clear-btn { min-height: 32px; padding: 4px 10px; font-size: 12px; color: var(--muted); }
+.act-row { width: 100%; text-align: left; background: var(--card-2); border: 0; border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 6px; min-height: 52px; color: var(--text); }
+.act-row[aria-expanded="true"] { border-radius: 12px 12px 0 0; }
+.act-date { display: flex; flex-direction: column; line-height: 1.15; }
+.act-date b { font-family: var(--font-display); font-size: 14px; }
+.act-date span { font-size: 11px; color: var(--muted); }
+.act-main { display: flex; flex-direction: column; min-width: 0; }
+.act-main > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act-main .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act-load { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.act-load .num { font-size: 18px; }
+.act-detail { background: var(--card-2); border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; padding: 10px 12px; font-size: 13px; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12px; text-decoration: underline; min-height: 24px; }

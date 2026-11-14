@@ -77,6 +77,7 @@ export function sessionsFrom(records, settings = trainingSettings(), activities 
       date: a.date, type, sport: a.sport, durationMin: a.movingMin || 0, distanceKm: a.distanceKm || 0,
       rpe: a.rpe ?? RPE_FALLBACK[type], rpeEstimated: a.rpe == null, avgHr: a.avgHr ?? null,
       trimp: trimpOf(a.movingMin, a.avgHr, hrRest, settings.hrMax), source: 'intervals',
+      id: a.id, name: a.name || '', start: a.start || '', maxHr: a.maxHr ?? null, icuLoad: a.load ?? null,
     });
   }
   for (const r of records) {
@@ -95,6 +96,8 @@ export function sessionsFrom(records, settings = trainingSettings(), activities 
       rpeEstimated: t.rpe == null,
       avgHr: t.avgHr ?? null,
       trimp: trimpOf(t.durationMin, t.avgHr, hrRest, settings.hrMax),
+      source: r.source === 'hrv4t' ? 'hrv4t' : 'tags',
+      id: `${r.source}-${r.date}`,
     });
   }
   // TRIMP schatten voor sessies zonder hartslag: mediane TRIMP/min per type uit je eigen data
