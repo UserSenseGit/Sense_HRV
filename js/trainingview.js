@@ -7,6 +7,10 @@ import {
   sportsOf, LOAD_METRICS, restingHr, loadOf,
 } from './training.js';
 import { mountChart, CHART_COLORS as C } from './charts.js';
+import { loadZoneContext, weekTargetsHtml, bindWeekNav } from './zoneview.js';
+import { weekStart, zoneSettings, setZoneSetting, ZONE_COLORS } from './zones.js';
+
+let zctx = null; // zonecontext van de laatste render
 
 const ss = {
   get(k, d) { try { const v = sessionStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -115,6 +119,8 @@ export async function renderTraining(el, toggle) {
       </dl>
     </div>
 
+    <div id="tgWeek"></div>
+
     <div class="card">
       <div class="between"><h3 class="card-title" style="margin: 0;">Activiteiten</h3>
         <span class="small muted" id="actPeriod"></span></div>
@@ -143,7 +149,11 @@ export async function renderTraining(el, toggle) {
         <div><label class="lbl" for="setHrRest">Rust-HR</label><input class="input" id="setHrRest" type="number" inputmode="numeric" placeholder="${hrRest} (auto)" value="${settings.hrRest ?? ''}"></div>
         <div><label class="lbl" for="setThr">Grens %</label><input class="input" id="setThr" type="number" inputmode="numeric" value="${settings.thresholdPct}"></div>
       </div>
-      <p class="small muted" style="margin: 0;">Rust-HR leeg = mediaan van je ochtend-HR (nu ${hrRest}). ${activities.length ? `${activities.length} activiteiten uit Intervals.icu.` : ''} ${metric === 'trimp' && estimated ? `${estimated} van de ${recent.length} trainingen van de laatste 90 dagen hebben geen hartslag; hun TRIMP is geschat.` : ''}</p>
+      <div class="grid-2">
+        <div><label class="lbl" for="setZMod">Start matig bij 75 % herstel</label><input class="input" id="setZMod" type="number" inputmode="numeric" value="${zoneSettings().mod75}"></div>
+        <div><label class="lbl" for="setZHigh">Start hoog bij 75 % herstel</label><input class="input" id="setZHigh" type="number" inputmode="numeric" value="${zoneSettings().high75}"></div>
+      </div>
+      <p class="small muted" style="margin: 0;">Zones schuiven met je herstel mee zoals bij Morpheus; dit is hun basis. Rust-HR leeg = mediaan van je ochtend-HR (nu ${hrRest}). ${activities.length ? `${activities.length} activiteiten uit Intervals.icu.` : ''} ${metric === 'trimp' && estimated ? `${estimated} van de ${recent.length} trainingen van de laatste 90 dagen hebben geen hartslag; hun TRIMP is geschat.` : ''}</p>
     </div>`;
 
   // Bediening
@@ -162,6 +172,26 @@ export async function renderTraining(el, toggle) {
   saveNum('#setHrMax', 'hrMax', 120, 230, false);
   saveNum('#setHrRest', 'hrRest', 30, 100, true);
   saveNum('#setThr', 'thresholdPct', 50, 95, false);
+  for (const [id, key] of [['#setZMod', 'mod75'], ['#setZHigh', 'high75']]) {
+    el.querySelector(id).onchange = (e) => {
+      const v = Number(e.target.value);
+      if (!(v >= 80 && v <= 220)) return;
+      setZoneSetting(key, v);
+      renderTraining(el, toggle).then(() => rebind(el, toggle));
+    };
+  }
+
+  // Weekdoelen per zone
+  const { ctx, hasActivities } = await loadZoneContext();
+  zctx = ctx;
+  const showWeek = (w) => {
+    const box = el.querySelector('#tgWeek');
+    if (!box) return;
+    box.innerHTML = weekTargetsHtml(ctx, w, { nav: true, hasActivities });
+    bindWeekNav(box, ctx, w, {}, showWeek);
+  };
+  showWeek(weekStart(today));
+  renderActivities(el, sessions, metric, sport, ss.get('sense.trPick', null));
 
   // Grafieken
   const labels = slice.map((d) => short(d.date));
@@ -218,6 +248,15 @@ const TYPE = { easy: 'licht', average: 'gemiddeld', intense: 'intensief' };
 const hm = (min) => (min >= 60 ? `${Math.floor(min / 60)}u${String(Math.round(min % 60)).padStart(2, '0')}` : `${Math.round(min)} min`);
 
 /** Lijst met individuele activiteiten: laatste 30 dagen, of de gekozen week/maand. */
+const zm = (s) => (s.id && zctx ? zctx.perAct.get(s.id) : null);
+function zbar(s) {
+  const m = zm(s);
+  if (!m) return '';
+  const tot = m.low + m.mod + m.high;
+  if (!tot) return '';
+  return `<span class="act-zbar" aria-label="${Math.round(m.low)} min laag, ${Math.round(m.mod)} matig, ${Math.round(m.high)} hoog">${['low', 'mod', 'high'].map((k) => `<i style="width: ${(m[k] / tot) * 100}%; background: ${ZONE_COLORS[k]};"></i>`).join('')}</span>`;
+}
+
 function renderActivities(el, sessions, metric, sport, pick) {
   const box = el.querySelector('#actList');
   if (!box) return;
@@ -237,7 +276,7 @@ function renderActivities(el, sessions, metric, sport, pick) {
     ${list.map((s, i) => `
       <button type="button" class="act-row" data-i="${i}" aria-expanded="false">
         <span class="act-date"><b>${s.date.slice(8, 10)}/${s.date.slice(5, 7)}</b><span>${esc(s.start ? s.start.slice(11, 16) : '')}</span></span>
-        <span class="act-main"><span>${esc(s.name || s.sport)}</span>
+        <span class="act-main"><span>${esc(s.name || s.sport)}</span>${zbar(s)}
           <span class="small muted">${esc(s.name ? `${s.sport} · ` : '')}${hm(s.durationMin)}${s.distanceKm ? ` · ${fmt(s.distanceKm, 1)} km` : ''}${s.avgHr ? ` · ${Math.round(s.avgHr)} bpm` : ''}</span></span>
         <span class="act-load"><span class="num">${fmt(loadOf(s, metric))}</span><span class="small muted">${metric === 'trimp' && s.trimpEstimated ? 'geschat' : esc(unit)}</span></span>
       </button>
@@ -252,6 +291,8 @@ function renderActivities(el, sessions, metric, sport, pick) {
           <dt>TRIMP</dt><dd>${fmt(s.trimp)}${s.trimpEstimated ? ' (geschat)' : ''}</dd>
           <dt>Duur × RPE</dt><dd>${fmt(s.durationMin * s.rpe)}</dd>
           ${s.icuLoad != null ? `<dt>Belasting Intervals.icu</dt><dd>${fmt(s.icuLoad)}</dd>` : ''}
+          ${zm(s) ? `<dt>Zones (${zm(s).zones.low[0]}/${zm(s).zones.mod[0]}/${zm(s).zones.high[0]})</dt><dd><span style="color: ${ZONE_COLORS.low}">${Math.round(zm(s).low)}</span> · <span style="color: ${ZONE_COLORS.mod}">${Math.round(zm(s).mod)}</span> · <span style="color: ${ZONE_COLORS.high}">${Math.round(zm(s).high)}</span> min</dd>
+          <dt>Zone 2</dt><dd>${Math.round(zm(s).z2)} min</dd>` : ''}
         </dl>
       </div>`).join('')}` : '<p class="small muted" style="margin: 0;">Geen activiteiten in deze periode.</p>';
   box.onclick = (e) => {
