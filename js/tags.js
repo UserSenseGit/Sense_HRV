@@ -107,6 +107,7 @@ export async function openTags(date, done = null) {
           <div><label class="lbl" for="tag-dur">Duur (min)</label><input type="number" id="tag-dur" class="input" inputmode="numeric" min="0" value="${t.durationMin ?? ''}"></div>
           <div><label class="lbl" for="tag-dist">Afstand (km)</label><input type="number" id="tag-dist" class="input" inputmode="decimal" min="0" step="0.1" value="${t.distanceKm ?? ''}"></div>
         </div>
+        <div><label class="lbl" for="tag-avghr">Gemiddelde hartslag (bpm, voor TRIMP)</label><input type="number" id="tag-avghr" class="input" inputmode="numeric" min="30" max="230" value="${t.avgHr ?? ''}"></div>
       </div>
       ${slider('performance', t.performance)}
     </div>
@@ -201,8 +202,9 @@ async function saveTags() {
     t.sport = $('tag-sport').value;
     t.durationMin = numOrNull($('tag-dur').value);
     t.distanceKm = numOrNull($('tag-dist').value);
+    t.avgHr = numOrNull($('tag-avghr').value);
   } else {
-    t.sport = null; t.durationMin = null; t.distanceKm = null; t.rpe = null; t.performance = null;
+    t.sport = null; t.durationMin = null; t.distanceKm = null; t.rpe = null; t.performance = null; t.avgHr = null;
   }
   t.alcohol = segVal('alcohol');
   const sick = segVal('sick'); t.sick = sick == null ? null : sick === 'yes';

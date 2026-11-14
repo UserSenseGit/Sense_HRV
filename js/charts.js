@@ -72,6 +72,7 @@ function mount(canvas, config) {
   registry.set(canvas, ch);
   return ch;
 }
+export { mount as mountChart };
 export function destroyAll() { for (const ch of registry.values()) ch.destroy(); registry.clear(); }
 
 /**

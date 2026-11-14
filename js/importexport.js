@@ -66,6 +66,7 @@ export function parseHrv4Training(text) {
     const training = TRAINING[str(g('training'))] || null;
     const dist = num(g('trainingDistance'));
     const time = num(g('trainingTime'));
+    const avgHr = num(g('bike_hr')) ?? num(g('run_hr')) ?? num(g('swim_hr'));
     const sportRaw = str(g('training_type'));
     const sick = str(g('sickness'));
     const trav = str(g('traveling'));
@@ -82,6 +83,7 @@ export function parseHrv4Training(text) {
       rpe: num(g('trainingRPE')),
       durationMin: time != null ? Math.round(time / 60) : null,
       distanceKm: dist != null ? r1(dist / 1000) : null,
+      avgHr: training && training !== 'rest' && avgHr != null ? Math.round(avgHr) : null,
       performance: num(g('training_performance')),
       motivation: num(g('trainingMotivation')),
       mentalEnergy: num(g('mental_energy')),

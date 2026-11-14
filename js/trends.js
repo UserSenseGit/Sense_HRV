@@ -2,6 +2,7 @@
 
 import { $, esc, notify, niceDate, longDate, addDays, isoDate } from './util.js';
 import { getAll } from './db.js';
+import { renderTraining } from './trainingview.js';
 import {
   buildSeries, trendAt, TREND_INFO, DIR_LABEL, DIR_ARROW, heatClass, HEAT_COLORS, PARAMS, DEFAULT_READINESS,
   readinessSeries, readinessAdvice, weekVsMonth, radarPoint, CATEGORY_LABEL,
@@ -60,8 +61,18 @@ const legend = (items) => `<div class="legend">${items.map(([c, l]) => `<span><i
 
 export async function renderTrends() {
   const el = $('view-trends');
-  const { days } = await loadSeries();
   destroyAll();
+  const mode = store.get('sense.trendsMode', 'hrv');
+  const toggle = `<div class="seg-ctl view-toggle" role="group" aria-label="Onderdeel">
+    <button type="button" data-tmode="hrv" aria-pressed="${mode === 'hrv'}">HRV</button>
+    <button type="button" data-tmode="training" aria-pressed="${mode === 'training'}">Training</button></div>`;
+  const bindToggle = () => el.querySelectorAll('button[data-tmode]').forEach((b) => { b.onclick = () => { store.set('sense.trendsMode', b.dataset.tmode); renderTrends(); }; });
+  if (mode === 'training') {
+    await renderTraining(el, toggle);
+    bindToggle();
+    return;
+  }
+  const { days } = await loadSeries();
   const li = lastMeasuredIndex(days);
   if (li < 0) {
     el.innerHTML = '<h2 class="view-title">Trends</h2><div class="card empty">Nog geen metingen. Importeer je HRV4Training-geschiedenis via Meer.</div>';
@@ -79,6 +90,7 @@ export async function renderTrends() {
 
   el.innerHTML = `
     <h2 class="view-title">Trends</h2>
+    ${toggle}
     <div class="seg-ctl" role="group" aria-label="Periode">
       ${PERIODS.map(([v, l]) => `<button type="button" data-period="${v}" aria-pressed="${v === period}">${l}</button>`).join('')}
     </div>
@@ -126,6 +138,7 @@ export async function renderTrends() {
     <div id="readiness" class="stack"></div>
   `;
 
+  bindToggle();
   el.querySelectorAll('button[data-period]').forEach((b) => { b.onclick = () => { store.set('sense.period', Number(b.dataset.period)); renderTrends(); }; });
 
   const lastIdx = slice.length - 1 - (end - li);
